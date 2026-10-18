@@ -32,6 +32,8 @@ jobs:
       - name: Set up the database
         if: steps.token.outputs.present == 'true'
         run: |
+          # Only the kind of token is shown, never the token itself.
+          echo "Token starts with ${SUPABASE_ACCESS_TOKEN:0:4}, ${#SUPABASE_ACCESS_TOKEN} characters"
           jq -Rs '{query: .}' supabase/setup.sql > /tmp/q.json
           code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' --data @/tmp/q.json)
