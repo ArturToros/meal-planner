@@ -20,6 +20,8 @@ env:
 jobs:
   supabase:
     runs-on: ubuntu-latest
+    # Same environment as the site, so the token is found whether it was saved for the repo or for this environment.
+    environment: github-pages
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
