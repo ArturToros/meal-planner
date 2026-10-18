@@ -23,12 +23,12 @@ jobs:
     # Same environment as the site, so the token is found whether it was saved for the repo or for this environment.
     environment: github-pages
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN || secrets.SUPABASE_ACTION_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Check for the Supabase token
         id: token
-        run: echo "present=${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+        run: echo "present=${{ env.SUPABASE_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
       - name: Set up the database
         if: steps.token.outputs.present == 'true'
         run: |

@@ -14,7 +14,7 @@ Live at https://arturtoros.github.io/meal-planner/
 ## One-time setup
 
 1. **GitHub Pages**: repo Settings › Pages › Source: **GitHub Actions**.
-2. **Supabase token for deploys**: in Supabase, Account › Access Tokens › Generate. Add it in this repo under Settings › Secrets and variables › Actions as `SUPABASE_ACCESS_TOKEN`. The deploy then sets up the database (`supabase/setup.sql`) and the edge functions by itself.
+2. **Supabase token for deploys**: in Supabase, Account › Access Tokens › Generate. Add it in this repo under Settings › Secrets and variables › Actions as `SUPABASE_ACCESS_TOKEN` (or `SUPABASE_ACTION_TOKEN`). The deploy then sets up the database (`supabase/setup.sql`) and the edge functions by itself.
 3. **Claude key**: in Supabase, Edge Functions › Secrets, add `ANTHROPIC_API_KEY` (from console.anthropic.com). Never paste it anywhere else.
 4. **Household login**: in Supabase, Authentication › Users › Add user, with one email and password for the household, and "Auto confirm" on. Everyone signs in with it once per phone.
 
