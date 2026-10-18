@@ -32,18 +32,26 @@ jobs:
       - name: Set up the database
         if: steps.token.outputs.present == 'true'
         run: |
-          # Only the kind of token is shown, never the token itself.
-          echo "Token starts with ${SUPABASE_ACCESS_TOKEN:0:4}, ${#SUPABASE_ACCESS_TOKEN} characters"
-          echo "Project lookup: $(curl -s -o /dev/null -w '%{http_code}' https://api.supabase.com/v1/projects/$PROJECT_REF -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")"
-          echo "Functions list: $(curl -s -o /dev/null -w '%{http_code}' https://api.supabase.com/v1/projects/$PROJECT_REF/functions -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")"
           jq -Rs '{query: .}' supabase/setup.sql > /tmp/q.json
           code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' --data @/tmp/q.json)
           cat /tmp/out.json; echo
           test "$code" -lt 300
       - name: Deploy the edge functions
-        if: always() && steps.token.outputs.present == 'true'
+        if: steps.token.outputs.present == 'true'
         run: npx --yes supabase@latest functions deploy read remind --project-ref "$PROJECT_REF" --no-verify-jwt --use-api
+      - name: Check that everything is in place
+        if: steps.token.outputs.present == 'true'
+        run: |
+          api=https://api.supabase.com/v1/projects/$PROJECT_REF
+          auth="Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+          q() { jq -n --arg q "$1" '{query: $q}' | curl -sS -X POST "$api/database/query" -H "$auth" -H 'Content-Type: application/json' --data @-; echo; }
+          echo "Tables:";      q "select table_name from information_schema.tables where table_schema='public' order by 1"
+          echo "Users:";       q "select count(*) as users from auth.users"
+          echo "Reminder job:"; q "select jobname, schedule from cron.job"
+          echo "Secrets set:"; curl -sS "$api/secrets" -H "$auth" | jq -r '.[].name' | grep -v '^SUPABASE_' || true
+          sleep 5
+          for f in read remind; do echo "$f answers: $(curl -sS -X POST https://$PROJECT_REF.supabase.co/functions/v1/$f -H 'Content-Type: application/json' -d '{}')"; done
 
   site:
     runs-on: ubuntu-latest
