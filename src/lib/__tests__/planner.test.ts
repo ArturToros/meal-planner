@@ -170,9 +170,27 @@ describe('planner', () => {
   })
 
   it('a long random week of changes never breaks the plan', () => {
+    // Ids are random too, so run many seeds of everything to catch rare orderings.
+    const real = Math.random
+    try {
+      for (let run = 1; run <= 100; run++) {
+        let r = run * 7919
+        Math.random = () => {
+          r = (r * 16807) % 2147483647
+          return r / 2147483647
+        }
+        fuzz(run)
+      }
+    } finally {
+      Math.random = real
+    }
+  }, 120_000)
+})
+
+function fuzz(run: number) {
     let h = fresh()
     let now = new Date(SUN)
-    let seed = 7
+    let seed = run
     const rnd = (n: number) => {
       seed = (seed * 9301 + 49297) % 233280
       return Math.floor((seed / 233280) * n)
@@ -196,11 +214,10 @@ describe('planner', () => {
       try {
         checkInvariants(h, now)
       } catch (e) {
-        throw new Error(`step ${step} action ${action}: ${(e as Error).message}`)
+        throw new Error(`run ${run} step ${step} action ${action}: ${(e as Error).message}`)
       }
     }
-  })
-})
+}
 
 describe('shopping', () => {
   it('lists what planned dishes need, minus staples, and ticking removes it', () => {

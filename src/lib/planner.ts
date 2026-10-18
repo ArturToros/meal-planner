@@ -300,12 +300,26 @@ export function validate(h: Household, now: Date) {
     if (over <= 0 || c.status === 'skipped') continue
     const lefts = h.meals.filter((m) => m.cookId === c.id && m.kind === 'leftover' && compareSlot(m, start) >= 0).sort(compareSlot).reverse()
     for (const m of lefts) {
+      while (over > 0 && (m.guests ?? 0) > 0) {
+        m.guests = m.guests! - 1 || undefined
+        over--
+      }
       while (over > 0 && m.eaters.length) {
         m.eaters.pop()
         over--
       }
     }
     if (over > 0 && c.status === 'planned') c.portions += over
+    // A pot already cooked can't grow: whoever doesn't fit gets something else from fill.
+    const own = h.meals.find((m) => m.cookId === c.id && m.kind === 'cook' && compareSlot(m, start) >= 0)
+    while (over > 0 && own && (own.guests ?? 0) > 0) {
+      own.guests = own.guests! - 1 || undefined
+      over--
+    }
+    while (over > 0 && own && own.eaters.length > 1) {
+      own.eaters.pop()
+      over--
+    }
   }
   h.meals = h.meals.filter((m) => m.eaters.length || (m.guests ?? 0) || m.kind === 'cook')
   // A planned pot nobody eats from is not worth cooking.
@@ -530,8 +544,9 @@ export function setEaters(h0: Household, date: string, slot: Slot, eaters: Perso
   if (pot && added.length) {
     const c = cookOf(h, pot.cookId)
     const r = recipeOf(h, c?.recipeId)
-    const canJoin = added.filter((p) => r?.eaters.includes(p))
-    pot.eaters.push(...canJoin.filter((p) => !pot.eaters.includes(p)))
+    let canJoin = added.filter((p) => r?.eaters.includes(p) && !pot.eaters.includes(p))
+    if (c?.status === 'cooked') canJoin = canJoin.slice(0, Math.max(0, available(h, c.id)))
+    pot.eaters.push(...canJoin)
     if (c?.status === 'planned') c.portions = Math.max(c.portions, portionsUsed(h, c.id))
   }
   for (const m of mealsAt(h, date, slot)) if (m.cookId) h.meals.filter((x) => x.cookId === m.cookId).forEach((x) => chainSlots.add(slotKey(x.date, x.slot)))
@@ -546,9 +561,14 @@ export function setGuests(h0: Household, mealId: string, guests: number, ctx: Ct
   const h = clone(h0)
   const m = h.meals.find((x) => x.id === mealId)
   if (!m) return { h: h0, alsoChanged: [] }
-  m.guests = Math.max(0, guests) || undefined
   const c = cookOf(h, m.cookId)
-  if (m.kind === 'cook' && c?.status === 'planned') c.portions = Math.max(c.portions, portionsUsed(h, c.id))
+  const growable = m.kind === 'cook' && c?.status === 'planned'
+  // A pot that's already cooked, a leftover or the freezer can only feed as many guests as there are portions left.
+  let cap = Infinity
+  if (c && !growable) cap = (m.guests ?? 0) + Math.max(0, available(h, c.id))
+  else if (m.kind === 'freezer' && m.freezerId) cap = (m.guests ?? 0) + Math.max(0, freezerAvailable(h, m.freezerId))
+  m.guests = Math.min(cap, Math.max(0, guests)) || undefined
+  if (growable) c.portions = Math.max(c.portions, portionsUsed(h, c.id))
   replan(h, ctx.now, { keepIdeas: true })
   return { h, alsoChanged: [] }
 }
