@@ -12,6 +12,29 @@ import { RecipeEdit, RecipeView, Recipes } from './ui/Recipes'
 import { List } from './ui/List'
 import { Money } from './ui/Money'
 import { Settings } from './ui/Settings'
+import { L, getLang, setLang, type Lang, word } from './lib/i18n'
+
+document.documentElement.lang = getLang()
+
+/** English | Български, on the screens before the app opens. */
+function LangSwitch() {
+  const cur = getLang()
+  const pick = (l: Lang) => {
+    if (l === cur) return
+    setLang(l)
+    window.location.reload()
+  }
+  return (
+    <div className="row-flex" role="group" aria-label="Language">
+      <button type="button" className={'chip' + (cur === 'en' ? ' on' : '')} aria-pressed={cur === 'en'} onClick={() => pick('en')}>
+        English
+      </button>
+      <button type="button" className={'chip' + (cur === 'bg' ? ' on' : '')} aria-pressed={cur === 'bg'} onClick={() => pick('bg')}>
+        Български
+      </button>
+    </div>
+  )
+}
 
 function useNow(): Date {
   const [now, setNow] = useState(() => new Date())
@@ -35,8 +58,10 @@ function Login() {
   return (
     <div className="app">
       <div className="screen no-nav pad" style={{ justifyContent: 'center', gap: 20, paddingTop: 40 }}>
+        <LangSwitch />
         <h1 className="h1 xl">
-          What are we <span className="hl">eating?</span>
+          {L('What are we ', 'Какво ще ')}
+          <span className="hl">{L('eating?', 'ядем?')}</span>
         </h1>
         <form
           className="stack"
@@ -45,25 +70,25 @@ function Login() {
             setBusy(true)
             setErr(null)
             const { error } = await supabase!.auth.signInWithPassword({ email: email.trim(), password })
-            if (error) setErr(error.message === 'Invalid login credentials' ? 'That email or password is not right.' : error.message)
+            if (error) setErr(error.message === 'Invalid login credentials' ? L('That email or password is not right.', 'Имейлът или паролата не са верни.') : error.message)
             setBusy(false)
           }}
         >
           <label className="field">
-            <span>Household email</span>
+            <span>{L('Household email', 'Имейл на домакинството')}</span>
             <input className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </label>
           <label className="field">
-            <span>Password</span>
+            <span>{L('Password', 'Парола')}</span>
             <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </label>
           {err && <p style={{ margin: 0, color: 'var(--danger)', fontWeight: 600 }}>{err}</p>}
           <button className="btn wide" disabled={busy}>
-            {busy ? <span className="spinner" /> : 'Open'}
+            {busy ? <span className="spinner" /> : L('Open', 'Вход')}
           </button>
         </form>
         <p className="muted" style={{ fontSize: 14 }}>
-          One login for the whole household. You stay signed in on this phone.
+          {L('One login for the whole household. You stay signed in on this phone.', 'Един вход за цялото домакинство. Оставаш влязъл на този телефон.')}
         </p>
       </div>
     </div>
@@ -74,11 +99,12 @@ function WhoAreYou({ names, onPick }: { names: Record<Person, string>; onPick: (
   return (
     <div className="app">
       <div className="screen no-nav pad" style={{ justifyContent: 'center', gap: 16 }}>
-        <h1 className="h1 xl">Who are you?</h1>
-        <p style={{ margin: 0, fontSize: 17 }}>So the others can see who changed what. Asked once on this phone.</p>
+        <LangSwitch />
+        <h1 className="h1 xl">{L('Who are you?', 'Кой си ти?')}</h1>
+        <p style={{ margin: 0, fontSize: 17 }}>{L('So the others can see who changed what. Asked once on this phone.', 'За да виждат другите кой какво е променил. Питаме само веднъж на този телефон.')}</p>
         {PEOPLE.map((p) => (
           <button key={p} className="btn ghost wide" style={{ justifyContent: 'flex-start', fontSize: 20 }} onClick={() => onPick(p)}>
-            {names[p]}
+            {word(names[p])}
           </button>
         ))}
       </div>
@@ -110,7 +136,7 @@ function Main() {
     return (
       <div className="app">
         <div className="screen no-nav pad" style={{ justifyContent: 'center', alignItems: 'center' }}>
-          {error ? <p>{error}</p> : <span className="spinner" aria-label="Loading" />}
+          {error ? <p>{error}</p> : <span className="spinner" aria-label={L('Loading', 'Зарежда се')} />}
         </div>
       </div>
     )
@@ -179,7 +205,7 @@ function Main() {
                 setToast(null)
               }}
             >
-              Undo
+              {L('Undo', 'Отмени')}
             </button>
           )}
         </div>

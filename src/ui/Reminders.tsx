@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/backend'
 import type { AppCtx } from './common'
+import { L, getLang } from '../lib/i18n'
 
 type State = 'checking' | 'offline' | 'install' | 'unsupported' | 'off' | 'on' | 'denied'
 
@@ -26,6 +27,8 @@ export function Reminders({ ctx }: { ctx: AppCtx }) {
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
       setState(sub ? 'on' : 'off')
+      // Keep the stored language and person in step with this phone, quietly.
+      if (sub) supabase.functions.invoke('remind', { body: { action: 'subscribe', subscription: sub.toJSON(), person: ctx.me, lang: getLang() } }).catch(() => {})
     })().catch(() => setState('unsupported'))
   }, [])
 
@@ -36,10 +39,10 @@ export function Reminders({ ctx }: { ctx: AppCtx }) {
       const perm = await Notification.requestPermission()
       if (perm !== 'granted') return setState(perm === 'denied' ? 'denied' : 'off')
       const { data, error } = await supabase!.functions.invoke('remind', { body: { action: 'key' } })
-      if (error || !data?.publicKey) throw new Error(error?.message ?? 'No key')
+      if (error || !data?.publicKey) throw new Error(error?.message ?? L('No key', 'Няма ключ'))
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(data.publicKey) as BufferSource })
-      const { error: e2 } = await supabase!.functions.invoke('remind', { body: { action: 'subscribe', subscription: sub.toJSON(), person: ctx.me } })
+      const { error: e2 } = await supabase!.functions.invoke('remind', { body: { action: 'subscribe', subscription: sub.toJSON(), person: ctx.me, lang: getLang() } })
       if (e2) throw e2
       setState('on')
     } catch (e) {
@@ -68,9 +71,9 @@ export function Reminders({ ctx }: { ctx: AppCtx }) {
     setBusy(true)
     setErr(null)
     try {
-      const { data, error } = await supabase!.functions.invoke('remind', { body: { action: 'test', person: ctx.me } })
+      const { data, error } = await supabase!.functions.invoke('remind', { body: { action: 'test', person: ctx.me, lang: getLang() } })
       if (error) throw error
-      if (!data?.sent) setErr('Nothing was sent. Turn reminders off and on again.')
+      if (!data?.sent) setErr(L('Nothing was sent. Turn reminders off and on again.', 'Нищо не беше изпратено. Изключете и включете напомнянията отново.'))
     } catch (e) {
       setErr((e as Error).message)
     } finally {
@@ -81,29 +84,33 @@ export function Reminders({ ctx }: { ctx: AppCtx }) {
   const hour = ctx.h.settings.reminderHour
   return (
     <div className="field">
-      <span>Evening reminder</span>
-      {state === 'offline' && <p className="muted" style={{ margin: 0 }}>Works once the app is online.</p>}
+      <span>{L('Evening reminder', 'Вечерно напомняне')}</span>
+      {state === 'offline' && <p className="muted" style={{ margin: 0 }}>{L('Works once the app is online.', 'Работи, когато приложението е онлайн.')}</p>}
       {state === 'install' && (
         <p style={{ margin: 0 }}>
-          First add the app to your home screen: in Safari tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>. Open it from there and come back here.
+          {L('First add the app to your home screen: in Safari tap ', 'Първо добавете приложението на началния екран: в Safari натиснете ')}
+          <strong>{L('Share', 'Сподели')}</strong>
+          {L(', then ', ', после ')}
+          <strong>{L('Add to Home Screen', 'Добави към началния екран')}</strong>
+          {L('. Open it from there and come back here.', '. Отворете го оттам и се върнете тук.')}
         </p>
       )}
-      {state === 'unsupported' && <p className="muted" style={{ margin: 0 }}>This phone doesn't support notifications from web apps.</p>}
-      {state === 'denied' && <p className="muted" style={{ margin: 0 }}>Notifications are blocked for this app in the phone's settings.</p>}
+      {state === 'unsupported' && <p className="muted" style={{ margin: 0 }}>{L("This phone doesn't support notifications from web apps.", 'Този телефон не поддържа известия от уеб приложения.')}</p>}
+      {state === 'denied' && <p className="muted" style={{ margin: 0 }}>{L("Notifications are blocked for this app in the phone's settings.", 'Известията за това приложение са спрени в настройките на телефона.')}</p>}
       {state === 'off' && (
         <button className="btn yellow" onClick={turnOn} disabled={busy}>
-          {busy ? <span className="spinner" /> : `Remind me at ${hour}:00 about tomorrow`}
+          {busy ? <span className="spinner" /> : L(`Remind me at ${hour}:00 about tomorrow`, `Напомняй ми в ${hour}:00 за утре`)}
         </button>
       )}
       {state === 'on' && (
         <div className="row-flex" style={{ justifyContent: 'space-between' }}>
-          <span>On, every day at {hour}:00.</span>
+          <span>{L(`On, every day at ${hour}:00.`, `Включено, всеки ден в ${hour}:00.`)}</span>
           <span className="row-flex">
             <button className="btn small ghost" onClick={test} disabled={busy}>
-              Test
+              {L('Test', 'Тест')}
             </button>
             <button className="btn small ghost" onClick={turnOff} disabled={busy}>
-              Turn off
+              {L('Turn off', 'Изключи')}
             </button>
           </span>
         </div>

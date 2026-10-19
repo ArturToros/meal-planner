@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AISLE_NAMES, AISLE_ORDER, estimate, shoppingList, tick, type ListItem } from '../lib/shopping'
 import { cooksInPlan, uid } from '../lib/planner'
 import type { AppCtx } from './common'
+import { L, plural, word } from '../lib/i18n'
 
 export function List({ ctx }: { ctx: AppCtx }) {
   const { h, now, dispatch } = ctx
@@ -15,7 +16,7 @@ export function List({ ctx }: { ctx: AppCtx }) {
   const onTick = (it: ListItem) => {
     const before = h
     dispatch((x) => tick(x, it, new Date()))
-    ctx.toast({ text: `${it.name} ticked off.`, undo: before })
+    ctx.toast({ text: L(`${it.label} ticked off.`, `${it.label}: отметнато.`), undo: before })
   }
 
   const couldntGet = (it: ListItem) => {
@@ -33,11 +34,11 @@ export function List({ ctx }: { ctx: AppCtx }) {
             .filter((i) => i.aisle === a)
             .map((it) => (
               <div key={it.key} className="check">
-                <input type="checkbox" checked={false} onChange={() => onTick(it)} aria-label={`Got ${it.name}`} />
+                <input type="checkbox" checked={false} onChange={() => onTick(it)} aria-label={L(`Got ${it.label}`, `Взето: ${it.label}`)} />
                 <button style={{ flex: 1, background: 'none', border: 0, padding: 0, textAlign: 'left', minHeight: 44 }} onClick={() => setMenu(it)}>
                   <span className="n" style={{ display: 'block' }}>
-                    {it.name[0].toUpperCase() + it.name.slice(1)}
-                    <small>{it.kind === 'recipe' ? it.forRecipes.join(', ') : it.kind === 'staple' ? 'running out' : 'added by hand'}</small>
+                    {it.label[0].toUpperCase() + it.label.slice(1)}
+                    <small>{it.kind === 'recipe' ? it.forRecipes.join(', ') : it.kind === 'staple' ? L('running out', 'свършва') : L('added by hand', 'добавено ръчно')}</small>
                   </span>
                 </button>
                 <span className="q">{it.qty}</span>
@@ -51,27 +52,27 @@ export function List({ ctx }: { ctx: AppCtx }) {
   return (
     <div className="screen">
       <div className="pad rule" style={{ paddingTop: 'calc(24px + var(--safe-t))', paddingBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <h1 className="h1">List</h1>
+        <h1 className="h1">{L('List', 'Списък')}</h1>
         <div className="mono" style={{ textAlign: 'right', lineHeight: 1.5 }}>
-          {items.length} things
+          {plural(items.length, 'thing', 'things', 'неща', 'неща')}
           <br />
-          {items.length ? `about €${estimate(items)}` : 'all done'}
+          {items.length ? L(`about €${estimate(items)}`, `около €${estimate(items)}`) : L('all done', 'всичко е взето')}
         </div>
       </div>
       <div className="pad">
         {soon.length > 0 && (
           <h2 className="h2" style={{ paddingTop: 18 }}>
-            <span className="hl">Today &amp; tomorrow</span>
+            <span className="hl">{L('Today & tomorrow', 'Днес и утре')}</span>
           </h2>
         )}
         <Group list={soon} />
         {later.length > 0 && (
           <h2 className="h2" style={{ paddingTop: 26 }}>
-            Later this week
+            {L('Later this week', 'По-късно тази седмица')}
           </h2>
         )}
         <Group list={later} />
-        {!items.length && <p style={{ paddingTop: 16, fontSize: 17 }}>Nothing to buy for the next four days.</p>}
+        {!items.length && <p style={{ paddingTop: 16, fontSize: 17 }}>{L('Nothing to buy for the next four days.', 'Няма какво да се купува за следващите четири дни.')}</p>}
 
         <form
           className="row-flex"
@@ -85,21 +86,21 @@ export function List({ ctx }: { ctx: AppCtx }) {
           }}
         >
           <label style={{ flex: 1 }}>
-            <span className="sr">Add something to the list</span>
-            <input className="input" placeholder="Add something…" value={add} onChange={(e) => setAdd(e.target.value)} />
+            <span className="sr">{L('Add something to the list', 'Добави нещо в списъка')}</span>
+            <input className="input" placeholder={L('Add something…', 'Добави нещо…')} value={add} onChange={(e) => setAdd(e.target.value)} />
           </label>
           <button className="btn small" style={{ minHeight: 48 }}>
-            Add
+            {L('Add', 'Добави')}
           </button>
         </form>
 
         {notRunning.length > 0 && (
           <>
-            <div className="section-label">Running out of something?</div>
+            <div className="section-label">{L('Running out of something?', 'Свършва ли нещо?')}</div>
             <div className="row-flex" style={{ flexWrap: 'wrap', gap: 8 }}>
               {notRunning.map((b) => (
                 <button key={b} className="chip x" onClick={() => dispatch((x) => ({ ...x, settings: { ...x.settings, runningOut: [...x.settings.runningOut, b] } }))}>
-                  + {b}
+                  + {word(b)}
                 </button>
               ))}
             </div>
@@ -109,9 +110,9 @@ export function List({ ctx }: { ctx: AppCtx }) {
 
       {menu && (
         <div className="overlay" onClick={() => setMenu(null)}>
-          <div className="sheet" role="dialog" aria-modal="true" aria-label={menu.name} onClick={(e) => e.stopPropagation()}>
-            <h2 className="h2">{menu.name}</h2>
-            {menu.kind === 'recipe' && <p className="muted" style={{ margin: 0 }}>For {menu.forRecipes.join(', ')}</p>}
+          <div className="sheet" role="dialog" aria-modal="true" aria-label={menu.label} onClick={(e) => e.stopPropagation()}>
+            <h2 className="h2">{menu.label[0].toUpperCase() + menu.label.slice(1)}</h2>
+            {menu.kind === 'recipe' && <p className="muted" style={{ margin: 0 }}>{L('For', 'За')} {menu.forRecipes.join(', ')}</p>}
             <button
               className="btn wide"
               onClick={() => {
@@ -119,11 +120,11 @@ export function List({ ctx }: { ctx: AppCtx }) {
                 setMenu(null)
               }}
             >
-              {menu.kind === 'recipe' ? 'Got it / have it at home' : 'Got it'}
+              {menu.kind === 'recipe' ? L('Got it / have it at home', 'Взето / имаме го вкъщи') : L('Got it', 'Взето')}
             </button>
             {menu.kind === 'recipe' && (
               <button className="btn ghost wide" onClick={() => couldntGet(menu)}>
-                Couldn't get it: change the meal
+                {L("Couldn't get it: change the meal", 'Нямаше го: смени ястието')}
               </button>
             )}
             {menu.kind === 'recipe' && (
@@ -132,14 +133,14 @@ export function List({ ctx }: { ctx: AppCtx }) {
                 onClick={() => {
                   dispatch((x) => ({ ...x, settings: { ...x.settings, staples: [...x.settings.staples, menu.name.replace(/, lactose-free$/, '')] } }))
                   setMenu(null)
-                  ctx.toast({ text: `${menu.name} won't show up again unless you say it's running out.` })
+                  ctx.toast({ text: L(`${menu.label} won't show up again unless you say it's running out.`, `${menu.label} няма да се появява, освен ако не кажете, че свършва.`) })
                 }}
               >
-                We always have this
+                {L('We always have this', 'Винаги го имаме')}
               </button>
             )}
             <button className="btn ghost wide" onClick={() => setMenu(null)}>
-              Close
+              {L('Close', 'Затвори')}
             </button>
           </div>
         </div>

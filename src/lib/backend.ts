@@ -4,7 +4,7 @@ import type { Household } from './types'
 export type SaveResult = 'ok' | 'conflict'
 
 export interface ReadRequest {
-  kind: 'receipt' | 'recipe' | 'ideas'
+  kind: 'receipt' | 'recipe' | 'ideas' | 'translate'
   images?: string[]
   url?: string
   text?: string

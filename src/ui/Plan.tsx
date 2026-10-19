@@ -24,10 +24,11 @@ import { addDays, compareSlot, currentSlot, longDate, shortDay, toDate } from '.
 import { shoppingList } from '../lib/shopping'
 import { PEOPLE } from '../lib/types'
 import { Icon, letters, type AppCtx } from './common'
+import { L, plural, recipeName, slotWord, word } from '../lib/i18n'
 
-export function resultToast(ctx: AppCtx, before: Household, res: Result, done = 'Done.') {
+export function resultToast(ctx: AppCtx, before: Household, res: Result, done = L('Done.', 'Готово.')) {
   const also = res.alsoChanged.map((s) => slotPhrase(s, ctx.now))
-  const text = [done, res.message, also.length ? `Also changed: ${also.join(', ')}.` : ''].filter(Boolean).join(' ')
+  const text = [done, res.message, also.length ? L(`Also changed: ${also.join(', ')}.`, `Променено е и: ${also.join(', ')}.`) : ''].filter(Boolean).join(' ')
   ctx.toast({ text, undo: before })
 }
 
@@ -40,17 +41,17 @@ function heroSlot(now: Date): SlotRef {
 
 function heroTitle(at: SlotRef, now: Date): string {
   const today = toDate(now)
-  if (at.date === today) return at.slot === 'dinner' ? 'Tonight' : 'Lunch today'
-  return at.slot === 'dinner' ? 'Tomorrow night' : 'Tomorrow lunch'
+  if (at.date === today) return at.slot === 'dinner' ? L('Tonight', 'Довечера') : L('Lunch today', 'Днес на обяд')
+  return at.slot === 'dinner' ? L('Tomorrow night', 'Утре вечер') : L('Tomorrow lunch', 'Утре на обяд')
 }
 
 function mealText(h: Household, m: Meal, now: Date) {
   const name = mealName(h, m)
   if (m.kind === 'leftover') {
     const c = cookOf(h, m.cookId)
-    return { name, extra: c ? `leftover from ${slotPhrase(c, now)}` : 'leftover' }
+    return { name, extra: c ? L(`leftover from ${slotPhrase(c, now)}`, `остатък от ${slotPhrase(c, now)}`) : L('leftover', 'остатък') }
   }
-  if (m.kind === 'freezer') return { name, extra: 'from the freezer' }
+  if (m.kind === 'freezer') return { name, extra: L('from the freezer', 'от фризера') }
   return { name, extra: '' }
 }
 
@@ -60,7 +61,7 @@ export function slotText(h: Household, at: SlotRef) {
   return {
     meals,
     office,
-    name: meals.map((m) => mealName(h, m) + (m.kind === 'leftover' ? ' (leftover)' : '')).join(' / '),
+    name: meals.map((m) => mealName(h, m) + (m.kind === 'leftover' ? L(' (leftover)', ' (остатък)') : '')).join(' / '),
     who: meals.map((m) => letters(m.eaters) + (m.guests ? ` +${m.guests}` : '')).join(' / '),
   }
 }
@@ -75,10 +76,10 @@ function Hero({ ctx, at }: { ctx: AppCtx; at: SlotRef }) {
       <div className="pad rule" style={{ padding: '28px 22px 22px' }}>
         <div className="mono">{heroTitle(at, now)}</div>
         <h1 className="h1 xl" style={{ margin: '12px 0' }}>
-          Nobody home
+          {L('Nobody home', 'Никой не е вкъщи')}
         </h1>
         <a className="btn ghost small" href={changeHref}>
-          Someone is eating
+          {L('Someone is eating', 'Някой ще яде')}
         </a>
       </div>
     )
@@ -94,21 +95,28 @@ function Hero({ ctx, at }: { ctx: AppCtx; at: SlotRef }) {
         if (m.kind === 'cook' && c && r) {
           const later = h.meals.filter((x) => x.cookId === c.id && x.kind === 'leftover').sort(compareSlot)
           const eatNow = m.eaters.length + (m.guests ?? 0)
-          const laterText = later.map((x) => `${x.eaters.length} for ${slotPhrase(x, now)}`).join(', ')
+          const laterText = later.map((x) => L(`${x.eaters.length} for ${slotPhrase(x, now)}`, `${x.eaters.length} за ${slotPhrase(x, now)}`)).join(', ')
           const spare = available(h, c.id)
           const toBuy = list.filter((i) => i.cookIds.includes(c.id)).length
           line = [
-            `Cook ${c.portions} portions: ${eatNow} now${laterText ? `, ${laterText}` : ''}${spare > 0 ? `, ${spare} spare` : ''}.`,
-            c.status === 'cooked' ? 'Already cooked.' : `About ${r.minutes} minutes.`,
-            c.status === 'cooked' ? '' : toBuy ? `${toBuy} thing${toBuy > 1 ? 's' : ''} still to buy.` : 'Everything is bought or at home.',
+            L(
+              `Cook ${c.portions} portions: ${eatNow} now${laterText ? `, ${laterText}` : ''}${spare > 0 ? `, ${spare} spare` : ''}.`,
+              `Сготви ${c.portions} порции: ${eatNow} сега${laterText ? `, ${laterText}` : ''}${spare > 0 ? `, ${spare} в повече` : ''}.`,
+            ),
+            c.status === 'cooked' ? L('Already cooked.', 'Вече е сготвено.') : L(`About ${r.minutes} minutes.`, `Около ${r.minutes} минути.`),
+            c.status === 'cooked'
+              ? ''
+              : toBuy
+                ? L(`${plural(toBuy, 'thing', 'things', 'нещо', 'неща')} still to buy.`, `Остава да се купят ${plural(toBuy, 'thing', 'things', 'нещо', 'неща')}.`)
+                : L('Everything is bought or at home.', 'Всичко е купено или го има вкъщи.'),
           ]
             .filter(Boolean)
             .join(' ')
-        } else if (m.kind === 'leftover') line = `Reheat the ${t.extra}.`
-        else if (m.kind === 'freezer') line = 'Take it out of the freezer in the morning.'
-        else if (m.kind === 'order') line = 'Ordering in is fine sometimes.'
-        else if (m.kind === 'out') line = 'Eating out.'
-        else line = 'Quick and easy.'
+        } else if (m.kind === 'leftover') line = L(`Reheat the ${t.extra}.`, `Затопли ${t.extra}.`)
+        else if (m.kind === 'freezer') line = L('Take it out of the freezer in the morning.', 'Извади го от фризера сутринта.')
+        else if (m.kind === 'order') line = L('Ordering in is fine sometimes.', 'Понякога е ок да поръчаме.')
+        else if (m.kind === 'out') line = L('Eating out.', 'Ядем навън.')
+        else line = L('Quick and easy.', 'Бързо и лесно.')
         return (
           <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {r?.photo && meals.length === 1 && <img src={r.photo} alt="" className="photo" style={{ border: '2px solid var(--ink)', aspectRatio: '16 / 9' }} />}
@@ -116,19 +124,19 @@ function Hero({ ctx, at }: { ctx: AppCtx; at: SlotRef }) {
               <span className="hl">{t.name}</span>
             </h1>
             <p style={{ margin: 0, fontSize: 17 }}>
-              {meals.length > 1 && <strong>{m.eaters.map((p) => h.settings.names[p]).join(' & ')}: </strong>}
+              {meals.length > 1 && <strong>{m.eaters.map((p) => word(h.settings.names[p])).join(' & ')}: </strong>}
               {line}
             </p>
             {m.kind === 'cook' && c?.status === 'planned' && (
               <a className="btn" href={`#/cook/${c.id}`} style={{ alignSelf: meals.length > 1 ? 'flex-start' : 'stretch' }}>
-                Cooking it
+                {L('Cooking it', 'Готвя го')}
               </a>
             )}
           </div>
         )
       })}
       <a className="btn ghost" href={changeHref}>
-        Change
+        {L('Change', 'Промени')}
       </a>
     </div>
   )
@@ -159,18 +167,18 @@ function Notices({ ctx }: { ctx: AppCtx }) {
       {pending && (
         <div className="notice yellow">
           <p>
-            <strong>{slotLabel(pending, now)}:</strong> {recipeOf(h, pending.recipeId)?.name}. What happened?
+            <strong>{slotLabel(pending, now)}:</strong> {(() => { const pr = recipeOf(h, pending.recipeId); return pr ? recipeName(pr) : '' })()}. {L('What happened?', 'Какво стана?')}
           </p>
           {orderAmount === null ? (
             <div className="actions">
-              <button className="btn small" onClick={() => run((x) => confirmPast(x, pending.id, 'cooked', undefined, { now, by: me }), 'Noted.')}>
-                Cooked it
+              <button className="btn small" onClick={() => run((x) => confirmPast(x, pending.id, 'cooked', undefined, { now, by: me }), L('Noted.', 'Записано.'))}>
+                {L('Cooked it', 'Сготвихме')}
               </button>
               <button className="btn small ghost" onClick={() => setOrderAmount('')}>
-                Ordered
+                {L('Ordered', 'Поръчахме')}
               </button>
-              <button className="btn small ghost" onClick={() => run((x) => confirmPast(x, pending.id, 'other', undefined, { now, by: me }), 'Noted.')}>
-                Something else
+              <button className="btn small ghost" onClick={() => run((x) => confirmPast(x, pending.id, 'other', undefined, { now, by: me }), L('Noted.', 'Записано.'))}>
+                {L('Something else', 'Друго')}
               </button>
             </div>
           ) : (
@@ -179,15 +187,15 @@ function Notices({ ctx }: { ctx: AppCtx }) {
               onSubmit={(e) => {
                 e.preventDefault()
                 const amount = parseFloat(orderAmount.replace(',', '.')) || undefined
-                run((x) => confirmPast(x, pending.id, 'ordered', amount, { now, by: me }), 'Noted.')
+                run((x) => confirmPast(x, pending.id, 'ordered', amount, { now, by: me }), L('Noted.', 'Записано.'))
                 setOrderAmount(null)
               }}
             >
               <label className="field" style={{ flex: 1 }}>
-                <span className="sr">How much was it, in euros</span>
-                <input className="input" inputMode="decimal" placeholder="€ how much? (optional)" value={orderAmount} onChange={(e) => setOrderAmount(e.target.value)} autoFocus />
+                <span className="sr">{L('How much was it, in euros', 'Колко струваше, в евро')}</span>
+                <input className="input" inputMode="decimal" placeholder={L('€ how much? (optional)', '€ колко? (по желание)')} value={orderAmount} onChange={(e) => setOrderAmount(e.target.value)} autoFocus />
               </label>
-              <button className="btn small">Save</button>
+              <button className="btn small">{L('Save', 'Запази')}</button>
             </form>
           )}
         </div>
@@ -195,27 +203,30 @@ function Notices({ ctx }: { ctx: AppCtx }) {
       {spare.map(({ cook, boxes }) => {
         const r = recipeOf(h, cook.recipeId)
         const until = PEOPLE.filter((p) => r?.eaters.includes(p) && compareSlot(lastGoodSlot(h, cook, p), currentSlot(now)) >= 0).map(
-          (p) => `${h.settings.names[p]} until ${slotPhrase(lastGoodSlot(h, cook, p), now)}`,
+          (p) => L(`${word(h.settings.names[p])} until ${slotPhrase(lastGoodSlot(h, cook, p), now)}`, `${word(h.settings.names[p])} до ${slotPhrase(lastGoodSlot(h, cook, p), now)}`),
         )
         return (
           <div className="notice" key={cook.id}>
             <p>
               <strong>
-                {boxes} spare box{boxes > 1 ? 'es' : ''} of {r?.name}.
+                {L(
+                  `${boxes} spare box${boxes > 1 ? 'es' : ''} of ${r ? recipeName(r) : ''}.`,
+                  `${boxes} ${boxes > 1 ? 'кутии' : 'кутия'} ${r ? recipeName(r) : ''} в повече.`,
+                )}
               </strong>{' '}
-              Good for {until.join(', ')}.
+              {L(`Good for ${until.join(', ')}.`, `Става за ${until.join(', ')}.`)}
             </p>
             <div className="actions">
               {r?.eaters.includes('A') && compareSlot(lastGoodSlot(h, cook, 'A'), currentSlot(now)) >= 0 && (
-                <button className="btn small" onClick={() => run((x) => handleSpare(x, cook.id, 'artur', { now, by: me }), 'Planned for Artur.')}>
-                  {h.settings.names.A} takes them
+                <button className="btn small" onClick={() => run((x) => handleSpare(x, cook.id, 'artur', { now, by: me }), L(`Planned for ${h.settings.names.A}.`, `Планирано за ${h.settings.names.A}.`))}>
+                  {L(`${h.settings.names.A} takes them`, `${h.settings.names.A} ги взима`)}
                 </button>
               )}
-              <button className="btn small ghost" onClick={() => run((x) => handleSpare(x, cook.id, 'freeze', { now, by: me }), 'In the freezer.')}>
-                Freeze
+              <button className="btn small ghost" onClick={() => run((x) => handleSpare(x, cook.id, 'freeze', { now, by: me }), L('In the freezer.', 'Във фризера.'))}>
+                {L('Freeze', 'Замрази')}
               </button>
-              <button className="btn small ghost" onClick={() => run((x) => handleSpare(x, cook.id, 'bin', { now, by: me }), 'Gone.')}>
-                Bin
+              <button className="btn small ghost" onClick={() => run((x) => handleSpare(x, cook.id, 'bin', { now, by: me }), L('Gone.', 'Изхвърлено.'))}>
+                {L('Bin', 'Изхвърли')}
               </button>
             </div>
           </div>
@@ -224,20 +235,25 @@ function Notices({ ctx }: { ctx: AppCtx }) {
       {defrost.map((m) => (
         <div className="notice yellow" key={m.id}>
           <p>
-            <strong>Tonight:</strong> take {mealName(h, m)} out of the freezer for tomorrow's {m.slot}.
+            <strong>{L('Tonight:', 'Довечера:')}</strong>{' '}
+            {L(`take ${mealName(h, m)} out of the freezer for tomorrow's ${m.slot}.`, `извади ${mealName(h, m)} от фризера за утре на ${slotWord(m.slot)}.`)}
           </p>
         </div>
       ))}
       {evening && <EveningCheck ctx={ctx} />}
       {other && (
         <p className="pad mono muted" style={{ margin: '14px 0 0', textTransform: 'none', letterSpacing: 0 }}>
-          {h.settings.names[other.by]} {other.text}
+          {word(h.settings.names[other.by])} {other.text}
         </p>
       )}
       {h.spending.length === 0 && h.log.length === 0 && (
         <div className="notice">
           <p>
-            <strong>Welcome.</strong> Your five recipes are in, plus a few starters so the plan has variety. Add more in Recipes, or hide any you don't want.
+            <strong>{L('Welcome.', 'Добре дошли.')}</strong>{' '}
+            {L(
+              "Your five recipes are in, plus a few starters so the plan has variety. Add more in Recipes, or hide any you don't want.",
+              'Петте ви рецепти са вътре, плюс няколко начални за разнообразие. Добавяйте още в Рецепти или скрийте тези, които не искате.',
+            )}
           </p>
         </div>
       )}
@@ -254,19 +270,23 @@ function EveningCheck({ ctx }: { ctx: AppCtx }) {
   return (
     <div className="notice">
       <p>
-        <strong>Tomorrow:</strong> {lunch.name || 'no lunch at home'} for lunch, {dinner.name || 'nothing'} for dinner.
-        {toBuy ? ` ${toBuy} thing${toBuy > 1 ? 's' : ''} to buy.` : ' Nothing to buy.'}
+        <strong>{L('Tomorrow:', 'Утре:')}</strong>{' '}
+        {L(
+          `${lunch.name || 'no lunch at home'} for lunch, ${dinner.name || 'nothing'} for dinner.`,
+          `на обяд ${lunch.name || 'нищо вкъщи'}, на вечеря ${dinner.name || 'нищо'}.`,
+        )}
+        {toBuy ? L(` ${plural(toBuy, 'thing', 'things', 'нещо', 'неща')} to buy.`, ` За купуване: ${plural(toBuy, 'thing', 'things', 'нещо', 'неща')}.`) : L(' Nothing to buy.', ' Няма нищо за купуване.')}
       </p>
       <div className="actions">
         <button className="btn small" onClick={() => dispatch((x) => ({ ...x, eveningOk: toDate(now) }))}>
-          Looks good
+          {L('Looks good', 'Добре е')}
         </button>
         <a className="btn small ghost" href={`#/change/${tomorrow}/dinner`}>
-          Change
+          {L('Change', 'Промени')}
         </a>
         {toBuy > 0 && (
           <a className="btn small ghost" href="#/list">
-            List
+            {L('List', 'Списък')}
           </a>
         )}
       </div>
@@ -285,11 +305,11 @@ export function Plan({ ctx }: { ctx: AppCtx }) {
     return (
       <a className={'row-btn' + (isIdeaDay(at.date, now) ? ' idea' : '')} href={`#/change/${at.date}/${at.slot}`} style={{ textDecoration: 'none' }}>
         <span className="when">
-          {shortDay(at.date)} {at.slot === 'lunch' ? 'lun' : 'din'}
+          {shortDay(at.date)} {at.slot === 'lunch' ? L('lun', 'об.') : L('din', 'веч.')}
         </span>
         <span className="what">
-          {t.name || <span className="muted">Nobody home</span>}
-          {t.office && <small> · office box</small>}
+          {t.name || <span className="muted">{L('Nobody home', 'Никой не е вкъщи')}</span>}
+          {t.office && <small>{L(' · office box', ' · кутия за офиса')}</small>}
         </span>
         <span className="who">{t.who}</span>
       </a>
@@ -299,19 +319,19 @@ export function Plan({ ctx }: { ctx: AppCtx }) {
     <div className="screen">
       <div className="top">
         <span>{longDate(toDate(now))}</span>
-        <a href="#/settings" className="link" aria-label="Settings" style={{ gap: 8 }}>
-          {h.settings.names[me as Person]}
+        <a href="#/settings" className="link" aria-label={L('Settings', 'Настройки')} style={{ gap: 8 }}>
+          {word(h.settings.names[me as Person])}
           <Icon name="gear" size={18} />
         </a>
       </div>
       <Hero ctx={ctx} at={hero} />
       <Notices ctx={ctx} />
       <div className="pad" style={{ paddingTop: 6 }}>
-        {decided.length > 0 && <div className="section-label">Decided</div>}
+        {decided.length > 0 && <div className="section-label">{L('Decided', 'Решено')}</div>}
         {decided.map((s) => (
           <Row key={s.date + s.slot} at={s} />
         ))}
-        {ideas.length > 0 && <div className="section-label">Ideas, change freely</div>}
+        {ideas.length > 0 && <div className="section-label">{L('Ideas, change freely', 'Идеи, сменяй свободно')}</div>}
         {ideas.map((s) => (
           <Row key={s.date + s.slot} at={s} />
         ))}

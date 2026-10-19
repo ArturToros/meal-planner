@@ -25,6 +25,7 @@ create table if not exists public.push_subs (
   created_at timestamptz not null default now()
 );
 alter table public.push_subs enable row level security;
+alter table public.push_subs add column if not exists lang text not null default 'en';
 insert into public.app_config (key, value) values ('cron_secret', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')) on conflict (key) do nothing;
 
 -- Photos of dishes and recipe screenshots. Public links so images load fast; uploads need sign-in.

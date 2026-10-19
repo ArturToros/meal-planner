@@ -5,6 +5,7 @@ import { addDays, longDate, toDate, weekStart } from '../lib/dates'
 import { shoppingList } from '../lib/shopping'
 import { backend, compressImage, toBase64 } from '../lib/backend'
 import { Icon, PhotoInput, Sheet, eur, type AppCtx } from './common'
+import { L, getLang, plural, word } from '../lib/i18n'
 
 interface ReadReceipt {
   store?: string
@@ -13,7 +14,12 @@ interface ReadReceipt {
   items?: { name: string; english?: string; amount: number; food: boolean }[]
 }
 
-const KIND_LABEL: Record<SpendKind, string> = { grocery: 'Groceries', takeaway: 'Takeaway', lunch: 'Lunch out', nonfood: 'Non-food' }
+const KIND_LABEL: Record<SpendKind, () => string> = {
+  grocery: () => L('Groceries', 'Храна от магазина'),
+  takeaway: () => L('Takeaway', 'Поръчки'),
+  lunch: () => L('Lunch out', 'Обяд навън'),
+  nonfood: () => L('Non-food', 'Нехранителни'),
+}
 
 function sum(list: SpendEntry[], kinds: SpendKind[]) {
   return list.filter((e) => kinds.includes(e.kind)).reduce((n, e) => n + e.amount, 0)
@@ -59,7 +65,7 @@ export function Money({ ctx }: { ctx: AppCtx }) {
     const nonFoodSum = nonFood.reduce((n, i) => n + i.amount, 0)
     const total = receipt.total ?? receipt.items.reduce((n, i) => n + i.amount, 0)
     const key = `${date}|${total.toFixed(2)}`
-    if (h.spending.some((e) => e.receiptKey === key) && !confirm('This receipt looks like one you already added. Add it again?')) return
+    if (h.spending.some((e) => e.receiptKey === key) && !confirm(L('This receipt looks like one you already added. Add it again?', 'Тази бележка изглежда вече е добавена. Да я добавя ли пак?'))) return
     const list = shoppingList(h, now)
     dispatch((x: Household) => {
       const next = structuredClone(x)
@@ -76,7 +82,12 @@ export function Money({ ctx }: { ctx: AppCtx }) {
       }
       return next
     })
-    ctx.toast({ text: `Receipt saved: ${eur(total - nonFoodSum)} food${nonFood.length ? `, ${eur(nonFoodSum)} non-food` : ''}.` })
+    ctx.toast({
+      text: L(
+        `Receipt saved: ${eur(total - nonFoodSum)} food${nonFood.length ? `, ${eur(nonFoodSum)} non-food` : ''}.`,
+        `Бележката е запазена: ${eur(total - nonFoodSum)} храна${nonFood.length ? `, ${eur(nonFoodSum)} нехранителни` : ''}.`,
+      ),
+    })
     setReceipt(null)
   }
 
@@ -84,25 +95,33 @@ export function Money({ ctx }: { ctx: AppCtx }) {
     <div className="screen">
       <div className="rule" style={{ padding: 'calc(24px + var(--safe-t)) 22px 22px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }} className="mono">
-          <span>This week, food</span>
-          <span className="muted">{prev.length ? `Last week ${eur(prevFood)}` : ''}</span>
+          <span>{L('This week, food', 'Тази седмица, храна')}</span>
+          <span className="muted">{prev.length ? L(`Last week ${eur(prevFood)}`, `Миналата седмица ${eur(prevFood)}`) : ''}</span>
         </div>
         <div className="big-number">{eur(food)}</div>
         <div className="row-flex" style={{ gap: 20, fontWeight: 600, flexWrap: 'wrap' }}>
-          <span>Groceries {eur(sum(week, ['grocery']))}</span>
-          <span className="hl">Takeaway {eur(sum(week, ['takeaway']))}</span>
-          {sum(week, ['lunch']) > 0 && <span>Lunch out {eur(sum(week, ['lunch']))}</span>}
+          <span>
+            {KIND_LABEL.grocery()} {eur(sum(week, ['grocery']))}
+          </span>
+          <span className="hl">
+            {KIND_LABEL.takeaway()} {eur(sum(week, ['takeaway']))}
+          </span>
+          {sum(week, ['lunch']) > 0 && (
+            <span>
+              {KIND_LABEL.lunch()} {eur(sum(week, ['lunch']))}
+            </span>
+          )}
         </div>
       </div>
       <div style={{ display: 'flex', borderBottom: '1px solid var(--ink)' }}>
         <PhotoInput camera multiple className="btn yellow" style={{ flex: 1, padding: 0 }} onFiles={snap}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center', minHeight: 64 }}>
             {reading ? <span className="spinner" /> : <Icon name="camera" />}
-            {reading ? 'Reading…' : 'Snap receipt'}
+            {reading ? L('Reading…', 'Чета…') : L('Snap receipt', 'Снимай бележка')}
           </span>
         </PhotoInput>
         <button className="btn ghost" style={{ flex: 1, minHeight: 64, border: 0, borderLeft: '1px solid var(--ink)' }} onClick={() => setOrdered({ amount: '', kind: 'takeaway', note: '' })}>
-          We ordered
+          {L('We ordered', 'Поръчахме')}
         </button>
       </div>
       {err && (
@@ -110,37 +129,40 @@ export function Money({ ctx }: { ctx: AppCtx }) {
           <p>{err}</p>
           <div className="actions">
             <button className="btn small ghost" onClick={() => setManual('')}>
-              Type the total instead
+              {L('Type the total instead', 'Въведи сумата ръчно')}
             </button>
           </div>
         </div>
       )}
       <div className="pad">
-        {recent.length === 0 && <p className="muted" style={{ paddingTop: 16 }}>Snap your first Lidl receipt, or add an order. Nothing to set up; just watch it for two weeks.</p>}
+        {recent.length === 0 && <p className="muted" style={{ paddingTop: 16 }}>{L(
+              'Snap your first Lidl receipt, or add an order. Nothing to set up; just watch it for two weeks.',
+              'Снимайте първата си бележка от Lidl или добавете поръчка. Нищо не трябва да се настройва; просто следете две седмици.',
+            )}</p>}
         {recent.map((e, i) => (
           <div key={e.id}>
-            {(i === 0 || (recent[i - 1].date >= thisWeek) !== (e.date >= thisWeek)) && <div className="section-label">{e.date >= thisWeek ? 'This week' : 'Last week'}</div>}
+            {(i === 0 || (recent[i - 1].date >= thisWeek) !== (e.date >= thisWeek)) && <div className="section-label">{e.date >= thisWeek ? L('This week', 'Тази седмица') : L('Last week', 'Миналата седмица')}</div>}
             <div className="check" style={{ minHeight: 52 }}>
               <span className="mono muted" style={{ width: 52 }}>
                 {longDate(e.date).split(' ').slice(0, 2).join(' ')}
               </span>
               <span className="n">
-                {e.store || KIND_LABEL[e.kind]}
+                {e.store || KIND_LABEL[e.kind]()}
                 <small>
-                  {KIND_LABEL[e.kind]}
-                  {e.items?.length ? ` · ${e.items.length} items` : ''}
+                  {KIND_LABEL[e.kind]()}
+                  {e.items?.length ? ` · ${plural(e.items.length, 'item', 'items', 'продукт', 'продукта')}` : ''}
                   {e.note ? ` · ${e.note}` : ''}
                 </small>
               </span>
               <span style={{ fontFamily: 'var(--mono)', fontWeight: 500 }}>{eur(e.amount)}</span>
               <button
-                aria-label="Delete"
+                aria-label={L('Delete', 'Изтрий')}
                 className="link"
                 style={{ minWidth: 36, justifyContent: 'center' }}
                 onClick={() => {
                   const before = h
                   dispatch((x) => ({ ...x, spending: x.spending.filter((y) => y.id !== e.id) }))
-                  ctx.toast({ text: 'Removed.', undo: before })
+                  ctx.toast({ text: L('Removed.', 'Премахнато.'), undo: before })
                 }}
               >
                 <Icon name="x" size={16} />
@@ -150,17 +172,20 @@ export function Money({ ctx }: { ctx: AppCtx }) {
         ))}
         {showNonFood && (
           <p style={{ marginTop: 18, fontSize: 14, color: 'var(--muted)' }}>
-            Non-food items (dish tabs, kitchen roll…) are split out of receipts automatically and only show when {h.settings.names.A} is using the app. This week: {eur(sum(week, ['nonfood']))}.
+            {L(
+              `Non-food items (dish tabs, kitchen roll…) are split out of receipts automatically and only show when ${word(h.settings.names.A)} is using the app. This week: ${eur(sum(week, ['nonfood']))}.`,
+              `Нехранителните продукти (таблетки за съдомиялна, кухненска ролка…) се отделят от бележките автоматично и се виждат само когато ${word(h.settings.names.A)} ползва приложението. Тази седмица: ${eur(sum(week, ['nonfood']))}.`,
+            )}
           </p>
         )}
         <button className="link" style={{ marginTop: 6 }} onClick={() => setManual('')}>
-          + Add a receipt total by hand
+          + {L('Add a receipt total by hand', 'Добави сума от бележка ръчно')}
         </button>
       </div>
 
       {ordered && (
-        <Sheet label="We ordered" onClose={() => setOrdered(null)}>
-          <h2 className="h2">We ordered</h2>
+        <Sheet label={L('We ordered', 'Поръчахме')} onClose={() => setOrdered(null)}>
+          <h2 className="h2">{L('We ordered', 'Поръчахме')}</h2>
           <form
             className="stack"
             onSubmit={(ev) => {
@@ -168,33 +193,33 @@ export function Money({ ctx }: { ctx: AppCtx }) {
               const amount = parseFloat(ordered.amount.replace(',', '.'))
               if (!amount) return
               dispatch((x) => ({ ...x, spending: [...x.spending, { id: uid(), date: toDate(now), kind: ordered.kind, amount, note: ordered.note || undefined, by: me }] }))
-              ctx.toast({ text: `${eur(amount)} added.` })
+              ctx.toast({ text: L(`${eur(amount)} added.`, `${eur(amount)} добавени.`) })
               setOrdered(null)
             }}
           >
             <div className="row-flex">
               {(['takeaway', 'lunch'] as SpendKind[]).map((k) => (
                 <button type="button" key={k} className={'chip' + (ordered.kind === k ? ' on' : '')} aria-pressed={ordered.kind === k} onClick={() => setOrdered({ ...ordered, kind: k })}>
-                  {k === 'takeaway' ? 'Takeaway' : 'Lunch at the office'}
+                  {k === 'takeaway' ? KIND_LABEL.takeaway() : L('Lunch at the office', 'Обяд в офиса')}
                 </button>
               ))}
             </div>
             <label className="field">
-              <span>How much, in euros</span>
+              <span>{L('How much, in euros', 'Колко, в евро')}</span>
               <input className="input" inputMode="decimal" autoFocus value={ordered.amount} onChange={(e) => setOrdered({ ...ordered, amount: e.target.value })} placeholder="24.50" />
             </label>
             <label className="field">
-              <span>Where from (optional)</span>
+              <span>{L('Where from (optional)', 'Откъде (по желание)')}</span>
               <input className="input" value={ordered.note} onChange={(e) => setOrdered({ ...ordered, note: e.target.value })} />
             </label>
-            <button className="btn wide">Add</button>
+            <button className="btn wide">{L('Add', 'Добави')}</button>
           </form>
         </Sheet>
       )}
 
       {manual !== null && (
-        <Sheet label="Receipt total" onClose={() => setManual(null)}>
-          <h2 className="h2">Receipt total</h2>
+        <Sheet label={L('Receipt total', 'Сума от бележка')} onClose={() => setManual(null)}>
+          <h2 className="h2">{L('Receipt total', 'Сума от бележка')}</h2>
           <form
             className="stack"
             onSubmit={(ev) => {
@@ -207,24 +232,24 @@ export function Money({ ctx }: { ctx: AppCtx }) {
             }}
           >
             <label className="field">
-              <span>Food total, in euros</span>
+              <span>{L('Food total, in euros', 'Сума за храна, в евро')}</span>
               <input className="input" inputMode="decimal" autoFocus value={manual} onChange={(e) => setManual(e.target.value)} />
             </label>
-            <button className="btn wide">Add</button>
+            <button className="btn wide">{L('Add', 'Добави')}</button>
           </form>
         </Sheet>
       )}
 
       {receipt && (
-        <Sheet label="Check the receipt" onClose={() => setReceipt(null)}>
-          <h2 className="h2">Check the receipt</h2>
+        <Sheet label={L('Check the receipt', 'Проверете бележката')} onClose={() => setReceipt(null)}>
+          <h2 className="h2">{L('Check the receipt', 'Проверете бележката')}</h2>
           <div className="grid2">
             <label className="field">
-              <span>Shop</span>
+              <span>{L('Shop', 'Магазин')}</span>
               <input className="input" value={receipt.store ?? ''} onChange={(e) => setReceipt({ ...receipt, store: e.target.value })} />
             </label>
             <label className="field">
-              <span>Total €</span>
+              <span>{L('Total €', 'Общо €')}</span>
               <input
                 className="input"
                 inputMode="decimal"
@@ -234,7 +259,10 @@ export function Money({ ctx }: { ctx: AppCtx }) {
             </label>
           </div>
           <p className="muted" style={{ margin: 0, fontSize: 14 }}>
-            Untick anything that isn't food. It goes to {h.settings.names.A}'s non-food list.
+            {L(
+              `Untick anything that isn't food. It goes to ${word(h.settings.names.A)}'s non-food list.`,
+              `Махнете отметката от всичко, което не е храна. То отива в нехранителния списък на ${word(h.settings.names.A)}.`,
+            )}
           </p>
           <div>
             {receipt.items.map((it, i) => (
@@ -245,15 +273,15 @@ export function Money({ ctx }: { ctx: AppCtx }) {
                   onChange={() => setReceipt({ ...receipt, items: receipt.items.map((x, j) => (j === i ? { ...x, food: !x.food } : x)) })}
                 />
                 <span className="n">
-                  {it.english || it.name}
-                  {it.english && it.english !== it.name && <small>{it.name}</small>}
+                  {getLang() === 'bg' ? it.name : it.english || it.name}
+                  {getLang() !== 'bg' && it.english && it.english !== it.name && <small>{it.name}</small>}
                 </span>
                 <span className="q">{eur(it.amount)}</span>
               </label>
             ))}
           </div>
           <button className="btn wide" onClick={saveReceipt}>
-            Save
+            {L('Save', 'Запази')}
           </button>
         </Sheet>
       )}

@@ -1,28 +1,31 @@
 import type { Aisle, Ingredient } from './types'
 
 const AISLE_WORDS: [Aisle, string[]][] = [
-  ['meat', ['chicken', 'beef', 'pork', 'mince', 'bacon', 'salmon', 'fish', 'turkey', 'ham', 'sausage', 'tuna', 'shrimp', 'prawn', 'lamb']],
-  ['fridge', ['milk', 'cream', 'cheese', 'yoghurt', 'yogurt', 'butter', 'egg', 'skyr', 'feta', 'mozzarella', 'parmesan', 'pesto', 'tofu', 'sirene', 'kashkaval']],
-  ['freezer', ['frozen', 'edamame', 'peas']],
-  ['bakery', ['bread', 'toast', 'tortilla', 'wrap', 'bun', 'baguette', 'pita']],
-  ['veg', ['onion', 'garlic', 'carrot', 'potato', 'pumpkin', 'squash', 'leek', 'cucumber', 'avocado', 'lettuce', 'salad', 'spinach', 'broccoli', 'zucchini', 'courgette', 'aubergine', 'eggplant', 'celery', 'lemon', 'lime', 'apple', 'banana', 'basil', 'parsley', 'dill', 'herb', 'ginger', 'cabbage', 'corn', 'bean sprout', 'mango', 'berries', 'fruit']],
-  ['dry', ['rice', 'pasta', 'spaghetti', 'penne', 'noodle', 'flour', 'oat', 'muesli', 'cereal', 'sugar', 'oil', 'vinegar', 'soy', 'stock', 'tomato paste', 'passata', 'tin', 'can', 'lentil', 'chickpea', 'bean', 'salt', 'pepper', 'paprika', 'spice', 'honey', 'sesame', 'nuts', 'coffee', 'tea']],
+  ['meat', ['пиле', 'пилешк', 'телешк', 'свинск', 'кайма', 'бекон', 'сьомга', 'риба', 'пуешк', 'шунка', 'наденица', 'кренвирш', 'луканка', 'тон', 'скариди', 'агнешк', 'chicken', 'beef', 'pork', 'mince', 'bacon', 'salmon', 'fish', 'turkey', 'ham', 'sausage', 'tuna', 'shrimp', 'prawn', 'lamb']],
+  ['fridge', ['мляко', 'сметана', 'сирене', 'кашкавал', 'масло', 'яйц', 'жълтък', 'скир', 'моцарела', 'пармезан', 'песто', 'извара', 'milk', 'cream', 'cheese', 'yoghurt', 'yogurt', 'butter', 'egg', 'skyr', 'feta', 'mozzarella', 'parmesan', 'pesto', 'tofu', 'sirene', 'kashkaval']],
+  ['freezer', ['замразен', 'грах', 'frozen', 'edamame', 'peas']],
+  ['bakery', ['хляб', 'питка', 'тортил', 'кифл', 'bread', 'toast', 'tortilla', 'wrap', 'bun', 'baguette', 'pita']],
+  ['veg', ['лук', 'чесън', 'морков', 'картоф', 'тиква', 'праз', 'краставиц', 'авокадо', 'маруля', 'салата', 'спанак', 'броколи', 'тиквичк', 'патладжан', 'целина', 'лимон', 'лайм', 'ябълк', 'банан', 'босилек', 'магданоз', 'копър', 'джинджифил', 'зеле', 'царевица', 'домат', 'чушк', 'гъби', 'плод', 'onion', 'garlic', 'carrot', 'potato', 'pumpkin', 'squash', 'leek', 'cucumber', 'avocado', 'lettuce', 'salad', 'spinach', 'broccoli', 'zucchini', 'courgette', 'aubergine', 'eggplant', 'celery', 'lemon', 'lime', 'apple', 'banana', 'basil', 'parsley', 'dill', 'herb', 'ginger', 'cabbage', 'corn', 'bean sprout', 'mango', 'berries', 'fruit']],
+  ['dry', ['ориз', 'паста', 'спагети', 'макарон', 'фиде', 'брашно', 'овесен', 'захар', 'олио', 'зехтин', 'оцет', 'соев', 'бульон', 'консерв', 'леща', 'нахут', 'боб', 'сол', 'пипер', 'подправ', 'мед', 'сусам', 'ядки', 'кафе', 'чай', 'rice', 'pasta', 'spaghetti', 'penne', 'noodle', 'flour', 'oat', 'muesli', 'cereal', 'sugar', 'oil', 'vinegar', 'soy', 'stock', 'tomato paste', 'passata', 'tin', 'can', 'lentil', 'chickpea', 'bean', 'salt', 'pepper', 'paprika', 'spice', 'honey', 'sesame', 'nuts', 'coffee', 'tea']],
 ]
 
-const LACTOSE = ['milk', 'cream', 'cheese', 'yoghurt', 'yogurt', 'butter', 'skyr', 'feta', 'mozzarella', 'parmesan', 'bechamel', 'sirene', 'kashkaval']
+const LACTOSE = ['мляко', 'сметана', 'сирене', 'кашкавал', 'масло', 'скир', 'моцарела', 'пармезан', 'извара', 'бешамел', 'milk', 'cream', 'cheese', 'yoghurt', 'yogurt', 'butter', 'skyr', 'feta', 'mozzarella', 'parmesan', 'bechamel', 'sirene', 'kashkaval']
 
 export function guessAisle(name: string): Aisle {
   const n = name.toLowerCase()
-  if (/stock|sauce|paste|cube|seasoning/.test(n)) return 'dry'
+  if (/stock|sauce|paste|cube|seasoning|бульон|сос|паста от|кубче|подправка/.test(n)) return 'dry'
   for (const [aisle, words] of AISLE_WORDS) if (words.some((w) => n.includes(w))) return aisle
   return 'other'
 }
 
 export function guessLactose(name: string): boolean {
   const n = name.toLowerCase()
-  if (n.includes('lactose-free') || n.includes('coconut')) return false
+  if (n.includes('lactose-free') || n.includes('без лактоза') || n.includes('coconut') || n.includes('кокос') || n.includes('растително')) return false
   return LACTOSE.some((w) => n.includes(w))
 }
+
+/** Bulgarian units as written on recipe cards, mapped to the ones the app counts in. */
+const UNITS_BG: Record<string, string> = { г: 'g', гр: 'g', кг: 'kg', мл: 'ml', л: 'l', 'с.л': 'tbsp', сл: 'tbsp', 'ч.л': 'tsp', чл: 'tsp', 'ч.ч': 'cup', чаша: 'cup', чаши: 'cup', бр: 'pcs', пакет: 'pack', пакета: 'pack', консерва: 'can', консерви: 'can', скилидка: 'clove', скилидки: 'clove', връзка: 'bunch', филия: 'slice', филии: 'slice' }
 
 const UNITS = ['kg', 'g', 'ml', 'l', 'tbsp', 'tsp', 'cup', 'cups', 'pcs', 'pc', 'pack', 'packs', 'can', 'cans', 'clove', 'cloves', 'bunch', 'slice', 'slices']
 
@@ -30,15 +33,16 @@ const UNITS = ['kg', 'g', 'ml', 'l', 'tbsp', 'tsp', 'cup', 'cups', 'pcs', 'pc', 
 export function parseIngredient(line: string): Ingredient | undefined {
   const text = line.trim().replace(/^[-•*]\s*/, '')
   if (!text) return undefined
-  const m = text.match(/^(\d+(?:[.,]\d+)?|\d+\/\d+|½|¼)\s*([a-zA-Z]+)?\.?\s+(.*)$/)
+  const m = text.match(/^(\d+(?:[.,]\d+)?|\d+\/\d+|½|¼)\s*([a-zA-Zа-яА-Я]+(?:\.\s?[а-я]+)?)?\.?\s+(.*)$/)
   let qty: number | undefined
   let unit: string | undefined
   let name = text
   if (m) {
     const raw = m[1].replace(',', '.')
     qty = raw === '½' ? 0.5 : raw === '¼' ? 0.25 : raw.includes('/') ? Number(raw.split('/')[0]) / Number(raw.split('/')[1]) : Number(raw)
-    if (m[2] && UNITS.includes(m[2].toLowerCase())) {
-      unit = m[2].toLowerCase()
+    const u = m[2]?.toLowerCase().replace(/\s/g, '')
+    if (u && (UNITS.includes(u) || UNITS_BG[u])) {
+      unit = UNITS_BG[u] ?? u
       name = m[3]
     } else {
       name = [m[2], m[3]].filter(Boolean).join(' ')

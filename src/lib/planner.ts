@@ -1,5 +1,6 @@
 import type { Cook, Household, Meal, Person, Recipe, Slot } from './types'
 import { PEOPLE } from './types'
+import { L, capitalize, dayWord, getLang, recipeName, slotWord, word } from './i18n'
 import { addDays, compareSlot, currentSlot, diffDays, slotIndex, slotKey, toDate, weekday } from './dates'
 
 export const HORIZON_DAYS = 4
@@ -109,16 +110,29 @@ export function mealName(h: Household, m: Meal): string {
   if (m.kind === 'cook' || m.kind === 'leftover') {
     const c = cookOf(h, m.cookId)
     const r = recipeOf(h, c?.recipeId)
-    return r?.name ?? 'Meal'
+    return r ? recipeName(r) : L('Meal', 'Ястие')
   }
   if (m.kind === 'freezer') {
     const f = h.freezer.find((x) => x.id === m.freezerId)
-    return recipeOf(h, f?.recipeId)?.name ?? 'From the freezer'
+    const r = recipeOf(h, f?.recipeId)
+    return r ? recipeName(r) : L('From the freezer', 'От фризера')
   }
-  if (m.kind === 'order') return m.label ?? 'Ordering in'
-  if (m.kind === 'out') return 'Eating out'
-  return m.label ?? 'Something quick'
+  if (m.kind === 'order') return labelWord(m.label ?? 'Ordering in')
+  if (m.kind === 'out') return L('Eating out', 'Навън')
+  return labelWord(m.label ?? 'Something quick')
 }
+
+/** Labels the app itself stores on meals, shown in the phone's language. Labels people typed stay as typed. */
+const LABELS_BG: Record<string, string> = {
+  'Ordering in': 'Поръчваме',
+  'Ordered in': 'Поръчахме',
+  'Something else': 'Нещо друго',
+  'Something quick': 'Нещо бързо',
+  Sandwiches: 'Сандвичи',
+  'Eggs & toast': 'Яйца и препечен хляб',
+  'Pasta with pesto': 'Паста с песто',
+}
+export const labelWord = (label: string) => (getLang() === 'bg' ? (LABELS_BG[label] ?? label) : label)
 
 function describeSlot(h: Household, date: string, slot: Slot): string {
   return mealsAt(h, date, slot)
@@ -440,15 +454,17 @@ function log(h: Household, ctx: Ctx, text: string) {
 
 export function slotLabel(at: SlotRef, now: Date): string {
   const n = diffDays(toDate(now), at.date)
-  if (n === 0) return at.slot === 'dinner' ? 'Tonight' : 'Lunch today'
-  if (n === 1) return `Tomorrow ${at.slot}`
-  if (n === -1) return at.slot === 'dinner' ? 'Last night' : 'Yesterday lunch'
-  return `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday(at.date)]} ${at.slot}`
+  const dinner = at.slot === 'dinner'
+  if (n === 0) return dinner ? L('Tonight', 'Довечера') : L('Lunch today', 'Днес на обяд')
+  if (n === 1) return L(`Tomorrow ${at.slot}`, `Утре на ${slotWord(at.slot)}`)
+  if (n === -1) return dinner ? L('Last night', 'Снощи') : L('Yesterday lunch', 'Вчера на обяд')
+  return L(`${capitalize(dayWord(weekday(at.date)))} ${at.slot}`, `${capitalize(dayWord(weekday(at.date)))} на ${slotWord(at.slot)}`)
 }
 
 /** The same label inside a sentence: "tonight", "tomorrow lunch", "Tuesday lunch". */
 export function slotPhrase(at: SlotRef, now: Date): string {
   const l = slotLabel(at, now)
+  if (getLang() === 'bg') return l[0].toLowerCase() + l.slice(1)
   return /^(Tonight|Lunch|Tomorrow|Last|Yesterday)/.test(l) ? l[0].toLowerCase() + l.slice(1) : l
 }
 
@@ -512,7 +528,8 @@ export function changeMeal(h0: Household, mealId: string, choice: Choice, ctx: C
   }
   const newMeal = h.meals[h.meals.length - 1]
   replan(h, ctx.now)
-  log(h, ctx, `changed ${slotPhrase(at, ctx.now)} from ${oldName} to ${newMeal ? mealName(h, newMeal) : 'nothing'}`)
+  const newName = newMeal ? mealName(h, newMeal) : L('nothing', 'нищо')
+  log(h, ctx, L(`changed ${slotPhrase(at, ctx.now)} from ${oldName} to ${newName}`, `смени ${slotPhrase(at, ctx.now)}: ${oldName} → ${newName}`))
   return { h, alsoChanged: diffSlots(before, h, ctx.now, at, chainSlots), message }
 }
 
@@ -526,7 +543,7 @@ export function orderedInstead(h0: Household, mealId: string, amount: number | u
   if (r) r.swapCount = Math.max(0, (r.swapCount ?? 1) - 1)
   const moved = moveToNextFree(res.h, recipeId, m.eaters, ctx.now)
   replan(res.h, ctx.now, { keepIdeas: true })
-  if (moved) res.message = `${r?.name} moved to ${slotPhrase(moved, ctx.now)}`
+  if (moved && r) res.message = L(`${recipeName(r)} moved to ${slotPhrase(moved, ctx.now)}`, `„${recipeName(r)}“ се мести за ${slotPhrase(moved, ctx.now)}.`)
   return res
 }
 
@@ -551,8 +568,8 @@ export function setEaters(h0: Household, date: string, slot: Slot, eaters: Perso
   }
   for (const m of mealsAt(h, date, slot)) if (m.cookId) h.meals.filter((x) => x.cookId === m.cookId).forEach((x) => chainSlots.add(slotKey(x.date, x.slot)))
   replan(h, ctx.now)
-  const name = (p: Person) => h.settings.names[p]
-  const bits = [...added.map((p) => `${name(p)} joins`), ...removed.map((p) => `${name(p)} is away`)]
+  const name = (p: Person) => word(h.settings.names[p])
+  const bits = [...added.map((p) => L(`${name(p)} joins`, `${name(p)} се присъединява`)), ...removed.map((p) => L(`${name(p)} is away`, `${name(p)} отсъства`))]
   if (bits.length) log(h, ctx, `${slotPhrase({ date, slot }, ctx.now)}: ${bits.join(', ')}`)
   return { h, alsoChanged: diffSlots(before, h, ctx.now, { date, slot }, chainSlots) }
 }
@@ -589,7 +606,9 @@ export function markCooked(h0: Household, cookId: string, boxesLeft: number, ctx
   c.portions = eatenNow + pastLeftovers + Math.max(0, boxesLeft)
   const chainSlots = new Set(h.meals.filter((m) => m.cookId === cookId).map((m) => slotKey(m.date, m.slot)))
   replan(h, ctx.now, { keepIdeas: true })
-  log(h, ctx, `cooked ${recipeOf(h, c.recipeId)?.name}, ${boxesLeft} boxes left`)
+  const cooked = recipeOf(h, c.recipeId)
+  const dish = cooked ? recipeName(cooked) : ''
+  log(h, ctx, L(`cooked ${dish}, ${boxesLeft} boxes left`, `сготви ${dish}, остават ${boxesLeft} кутии`))
   return { h, alsoChanged: diffSlots(before, h, ctx.now, c, chainSlots) }
 }
 
@@ -616,7 +635,8 @@ export function confirmPast(h0: Household, cookId: string, outcome: 'cooked' | '
   if (outcome === 'ordered' && diffDays(c.date, toDate(ctx.now)) <= 2) {
     const moved = moveToNextFree(h, c.recipeId, eaters, ctx.now)
     replan(h, ctx.now, { keepIdeas: true })
-    if (moved) message = `${recipeOf(h, c.recipeId)?.name} moved to ${slotPhrase(moved, ctx.now)}`
+    const mr = recipeOf(h, c.recipeId)
+    if (moved && mr) message = L(`${recipeName(mr)} moved to ${slotPhrase(moved, ctx.now)}`, `„${recipeName(mr)}“ се мести за ${slotPhrase(moved, ctx.now)}.`)
   }
   return { h, alsoChanged: diffSlots(before, h, ctx.now, c, chainSlots), message }
 }
@@ -678,7 +698,7 @@ export function planRecipe(h0: Household, recipeId: string, ctx: Ctx): Result {
   const h = clone(h0)
   const moved = moveToNextFree(h, recipeId, expectedEaters(h, toDate(ctx.now), 'dinner'), ctx.now)
   replan(h, ctx.now, { keepIdeas: true })
-  return { h, alsoChanged: [], message: moved ? `Planned for ${slotPhrase(moved, ctx.now)}` : 'No free day in the next four days' }
+  return { h, alsoChanged: [], message: moved ? L(`Planned for ${slotPhrase(moved, ctx.now)}`, `Планирано за ${slotPhrase(moved, ctx.now)}`) : L('No free day in the next four days', 'Няма свободен ден в следващите четири дни') }
 }
 
 export function lastChangeByOthers(h: Household, me: Person, now: Date) {

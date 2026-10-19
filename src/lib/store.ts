@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { backend } from './backend'
-import { emptyHousehold, ideaPool } from './seed'
+import { emptyHousehold, ideaPool, seedTranslations } from './seed'
 import { replan, uid } from './planner'
 import { parseIngredient } from './ingredients'
+import { L, getLang } from './i18n'
 import { weekStart, toDate } from './dates'
 import { PEOPLE, type Household, type Person, type Recipe } from './types'
 
@@ -34,7 +35,19 @@ export function setMe(p: Person) {
 /** Fill in fields added after the household was first saved. */
 function upgrade(h: Household): Household {
   const base = emptyHousehold()
-  return { ...base, ...h, who: h.who ?? {}, settings: { ...base.settings, ...h.settings } }
+  const up = { ...base, ...h, who: h.who ?? {}, settings: { ...base.settings, ...h.settings } }
+  // Built-in recipes saved before Bulgarian existed get their Bulgarian names and steps.
+  const tr = seedTranslations()
+  const byName = new Map(Object.entries(tr).map(([k, v]) => [k.toLowerCase(), v]))
+  if (up.recipes.some((r) => !r.nameBg && byName.has(r.name.toLowerCase()))) {
+    up.recipes = up.recipes.map((r) => {
+      const t = byName.get(r.name.toLowerCase())
+      if (r.nameBg || !t) return r
+      const ing = new Map(Object.entries(t.ingredients).map(([k, v]) => [k.toLowerCase(), v]))
+      return { ...r, nameBg: t.nameBg, stepsBg: r.stepsBg ?? t.stepsBg, ingredients: r.ingredients.map((i) => (i.bg ? i : { ...i, bg: ing.get(i.name.toLowerCase()) })) }
+    })
+  }
+  return up
 }
 
 /** Two new recipe ideas each week, from the built-in pool when reading isn't available. */
@@ -57,8 +70,10 @@ interface ReadIdea {
   name: string
   minutes: number
   portions: number
-  ingredients: { name: string; qty: number | null; unit: string }[]
+  nameBg?: string
+  ingredients: { name: string; bg?: string; qty: number | null; unit: string }[]
   steps: string
+  stepsBg?: string
   boxable: boolean
 }
 
@@ -77,10 +92,12 @@ export function swapInIdeas(h: Household, week: string, ideas: ReadIdea[], now: 
     const r: Recipe = {
       id: uid(),
       name: x.name,
+      nameBg: x.nameBg || undefined,
       minutes: x.minutes,
       portions: x.portions,
-      ingredients: x.ingredients.map((i) => ({ ...parseIngredient(i.name)!, qty: i.qty ?? undefined, unit: i.unit || undefined })).filter((i) => i.name),
+      ingredients: x.ingredients.map((i) => ({ ...parseIngredient(i.name)!, qty: i.qty ?? undefined, unit: i.unit || undefined, bg: i.bg || undefined })).filter((i) => i.name),
       steps: x.steps,
+      stepsBg: x.stepsBg || undefined,
       eaters: [...PEOPLE],
       boxable: x.boxable,
       isIdea: true,
@@ -91,6 +108,40 @@ export function swapInIdeas(h: Household, week: string, ideas: ReadIdea[], now: 
   }
   replan(next, now, { keepIdeas: true })
   return next
+}
+
+export interface Translation {
+  name: string
+  nameBg: string
+  steps: string
+  stepsBg: string
+  ingredients: { name: string; bg: string }[]
+}
+
+/** Merge a translation into a recipe, keeping amounts and aisles. */
+export function applyTranslation(h: Household, recipeId: string, t: Translation): Household {
+  const r = h.recipes.find((x) => x.id === recipeId)
+  if (!r) return h
+  const next = structuredClone(h)
+  const rr = next.recipes.find((x) => x.id === recipeId)!
+  rr.name = t.name || rr.name
+  rr.nameBg = t.nameBg || rr.nameBg
+  rr.steps = t.steps || rr.steps
+  rr.stepsBg = t.stepsBg || rr.stepsBg
+  rr.ingredients = rr.ingredients.map((i, n) => {
+    const x = t.ingredients[n]
+    if (!x) return i
+    const re = x.name ? parseIngredient(x.name) : undefined
+    return { ...i, name: x.name || i.name, bg: x.bg || i.bg, aisle: re && re.aisle !== 'other' ? re.aisle : i.aisle, lactose: i.lactose || re?.lactose }
+  })
+  return next
+}
+
+export function translateRequest(r: Recipe) {
+  return backend.read<Translation>({
+    kind: 'translate',
+    context: { name: r.name, nameBg: r.nameBg, steps: r.steps, stepsBg: r.stepsBg, ingredients: r.ingredients.map((i) => ({ name: i.name, bg: i.bg })) },
+  })
 }
 
 export function useHousehold() {
@@ -160,7 +211,7 @@ export function useHousehold() {
               return
             }
           }
-          setError('Could not save. Check the connection and try again.')
+          setError(L('Could not save. Check the connection and try again.', 'Не успях да запиша. Провери връзката и опитай пак.'))
         } catch (e) {
           setError((e as Error).message)
         } finally {
@@ -185,6 +236,23 @@ export function useHousehold() {
       .catch(() => {
         /* the built-in ideas stay for this week */
       })
+  }, [h, dispatch])
+
+  // On a Bulgarian phone, quietly translate recipes that only exist in one language, one at a time.
+  const translating = useRef(new Set<string>())
+  const failed = useRef(new Set<string>())
+  useEffect(() => {
+    if (!h || !backend.online || getLang() !== 'bg' || translating.current.size) return
+    const r = h.recipes.find((x) => !x.nameBg && !x.never && !failed.current.has(x.id))
+    if (!r) return
+    translating.current.add(r.id)
+    translateRequest(r)
+      .then((t) => dispatch((x) => applyTranslation(x, r.id, t)))
+      .catch(() => {
+        // Stays in English; tried again next time the app opens.
+        failed.current.add(r.id)
+      })
+      .finally(() => translating.current.delete(r.id))
   }, [h, dispatch])
 
   return { h, dispatch, error, saving, refresh }

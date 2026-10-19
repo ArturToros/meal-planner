@@ -15,8 +15,9 @@ const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SE
 type Person = 'A' | 'S' | 'E'
 type Slot = 'lunch' | 'dinner'
 interface Meal { date: string; slot: Slot; eaters: Person[]; guests?: number; kind: string; cookId?: string; freezerId?: string; label?: string }
+type Lang = 'en' | 'bg'
 interface Household {
-  recipes: { id: string; name: string }[]
+  recipes: { id: string; name: string; nameBg?: string }[]
   cooks: { id: string; recipeId: string; date: string; slot: Slot; status: string }[]
   meals: Meal[]
   freezer: { id: string; recipeId: string }[]
@@ -50,48 +51,55 @@ function sofia(days = 0) {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) }
 }
 
-function name(h: Household, m: Meal): string {
-  const recipe = (id?: string) => h.recipes.find((r) => r.id === id)?.name
-  if (m.kind === 'cook' || m.kind === 'leftover') return recipe(h.cooks.find((c) => c.id === m.cookId)?.recipeId) ?? 'a meal'
-  if (m.kind === 'freezer') return recipe(h.freezer.find((f) => f.id === m.freezerId)?.recipeId) ?? 'something from the freezer'
-  if (m.kind === 'order') return 'ordering in'
-  if (m.kind === 'out') return 'eating out'
+const T = (lang: Lang, en: string, bg: string) => (lang === 'bg' ? bg : en)
+
+function name(h: Household, m: Meal, lang: Lang): string {
+  const recipe = (id?: string) => {
+    const r = h.recipes.find((x) => x.id === id)
+    return lang === 'bg' && r?.nameBg ? r.nameBg : r?.name
+  }
+  if (m.kind === 'cook' || m.kind === 'leftover') return recipe(h.cooks.find((c) => c.id === m.cookId)?.recipeId) ?? T(lang, 'a meal', 'ястие')
+  if (m.kind === 'freezer') return recipe(h.freezer.find((f) => f.id === m.freezerId)?.recipeId) ?? T(lang, 'something from the freezer', 'нещо от фризера')
+  if (m.kind === 'order') return T(lang, 'ordering in', 'поръчка')
+  if (m.kind === 'out') return T(lang, 'eating out', 'навън')
+  if (lang === 'bg' && (!m.label || m.label === 'Sandwiches')) return m.label ? 'сандвичи' : 'нещо бързо'
   return m.label ?? 'something quick'
 }
 
 /** What tomorrow looks like for one person, in a line or two. */
-function message(h: Household, who: Person, tomorrow: string) {
+function message(h: Household, who: Person, tomorrow: string, lang: Lang) {
   const weekday = new Date(tomorrow + 'T12:00:00Z').getUTCDay()
-  const dayName = new Date(tomorrow + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' })
+  const day = new Date(tomorrow + 'T12:00:00Z').toLocaleDateString(lang === 'bg' ? 'bg-BG' : 'en-GB', { weekday: 'long', timeZone: 'UTC' })
+  const dayName = day.charAt(0).toUpperCase() + day.slice(1)
   const mine = h.meals.filter((m) => m.date === tomorrow && m.eaters.includes(who))
-  if (!h.meals.some((m) => m.date === tomorrow)) return { title: dayName, body: 'Open the app to see tomorrow’s meals.' }
-  if (!mine.length) return { title: dayName, body: 'No meals at home for you tomorrow.' }
+  if (!h.meals.some((m) => m.date === tomorrow)) return { title: dayName, body: T(lang, 'Open the app to see tomorrow’s meals.', 'Отвори приложението, за да видиш утрешните ястия.') }
+  if (!mine.length) return { title: dayName, body: T(lang, 'No meals at home for you tomorrow.', 'Утре нямаш ястия вкъщи.') }
   const parts: string[] = []
   const notes: string[] = []
   for (const slot of ['lunch', 'dinner'] as Slot[]) {
     const m = mine.find((x) => x.slot === slot)
     if (!m) continue
     const office = slot === 'lunch' && h.settings.officeDays.includes(weekday) && h.settings.officePeople.includes(who)
-    let line = `${slot === 'lunch' ? 'Lunch' : 'Dinner'}: ${name(h, m)}`
-    if (m.kind === 'leftover') line += office ? ' (pack a box tonight)' : ' (leftover)'
-    else if (m.kind === 'cook') line += ', cooking'
-    else if (office && m.kind !== 'out') line += ' at the office'
+    let line = `${slot === 'lunch' ? T(lang, 'Lunch', 'Обяд') : T(lang, 'Dinner', 'Вечеря')}: ${name(h, m, lang)}`
+    if (m.kind === 'leftover') line += office ? T(lang, ' (pack a box tonight)', ' (приготви кутия довечера)') : T(lang, ' (leftover)', ' (остатък)')
+    else if (m.kind === 'cook') line += T(lang, ', cooking', ', готвим')
+    else if (office && m.kind !== 'out') line += T(lang, ' at the office', ' в офиса')
     parts.push(line)
-    if (m.kind === 'freezer') notes.push(`Take ${name(h, m)} out of the freezer tonight.`)
+    if (m.kind === 'freezer') notes.push(T(lang, `Take ${name(h, m, lang)} out of the freezer tonight.`, `Извади ${name(h, m, lang)} от фризера довечера.`))
   }
-  if (mine.some((m) => m.kind === 'cook')) notes.push('Check the shopping list.')
+  if (mine.some((m) => m.kind === 'cook')) notes.push(T(lang, 'Check the shopping list.', 'Провери списъка за пазаруване.'))
   return { title: dayName, body: [parts.join('. ') + '.', ...notes].join(' ') }
 }
 
 async function send(h: Household, tomorrow: string, only?: Person) {
   await vapid()
-  let q = db.from('push_subs').select('endpoint, person, sub')
+  let q = db.from('push_subs').select('endpoint, person, sub, lang')
   if (only) q = q.eq('person', only)
   const { data: subs } = await q
   let sent = 0
   for (const s of subs ?? []) {
     try {
-      await webpush.sendNotification(s.sub, JSON.stringify(message(h, s.person as Person, tomorrow)), { TTL: 6 * 3600 })
+      await webpush.sendNotification(s.sub, JSON.stringify(message(h, s.person as Person, tomorrow, s.lang === 'bg' ? 'bg' : 'en')), { TTL: 6 * 3600 })
       sent++
     } catch (e) {
       const code = (e as { statusCode?: number }).statusCode
@@ -129,7 +137,7 @@ Deno.serve(async (req) => {
 
     if (body.action === 'key') return json({ publicKey: await vapid() })
     if (body.action === 'subscribe') {
-      const { error } = await db.from('push_subs').upsert({ endpoint: body.subscription.endpoint, person: body.person, sub: body.subscription })
+      const { error } = await db.from('push_subs').upsert({ endpoint: body.subscription.endpoint, person: body.person, sub: body.subscription, lang: body.lang === 'bg' ? 'bg' : 'en' })
       if (error) throw error
       return json({ ok: true })
     }
@@ -140,6 +148,8 @@ Deno.serve(async (req) => {
     if (body.action === 'test') {
       const h = await household()
       if (!h) return json({ error: 'No plan yet.' }, 404)
+      // The phone may have switched language since it subscribed.
+      if (body.lang && body.endpoint) await db.from('push_subs').update({ lang: body.lang === 'bg' ? 'bg' : 'en' }).eq('endpoint', body.endpoint)
       return json({ sent: await send(h, sofia(1).date, body.person) })
     }
     return json({ error: 'Unknown request.' }, 400)

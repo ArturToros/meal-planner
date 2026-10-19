@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Household, Person } from '../lib/types'
 import type { Action, Toast } from '../lib/store'
+import { L } from '../lib/i18n'
 
 export interface AppCtx {
   h: Household
@@ -36,13 +37,13 @@ export function back(fallback = 'plan') {
 
 export function Nav({ tab }: { tab: string }) {
   const tabs: [string, string][] = [
-    ['plan', 'Plan'],
-    ['recipes', 'Recipes'],
-    ['list', 'List'],
-    ['money', 'Money'],
+    ['plan', L('Plan', 'План')],
+    ['recipes', L('Recipes', 'Рецепти')],
+    ['list', L('List', 'Списък')],
+    ['money', L('Money', 'Разходи')],
   ]
   return (
-    <nav className="nav" aria-label="Main">
+    <nav className="nav" aria-label={L('Main', 'Основно меню')}>
       <div className="nav-inner">
         {tabs.map(([id, label]) => (
           <a key={id} href={'#/' + id} className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined}>
@@ -54,7 +55,7 @@ export function Nav({ tab }: { tab: string }) {
   )
 }
 
-export function Back({ label = 'Back', fallback }: { label?: string; fallback?: string }) {
+export function Back({ label = L('Back', 'Назад'), fallback }: { label?: string; fallback?: string }) {
   return (
     <div className="top">
       <button className="link" onClick={() => back(fallback)}>
@@ -122,11 +123,11 @@ export function Icon({ name, size = 20 }: { name: 'camera' | 'doc' | 'plus' | 'g
 export function Stepper({ value, onChange, min = 0, max = 30, label }: { value: number; onChange: (n: number) => void; min?: number; max?: number; label: string }) {
   return (
     <div className="stepper" role="group" aria-label={label}>
-      <button type="button" aria-label={`Fewer ${label}`} onClick={() => onChange(Math.max(min, value - 1))}>
+      <button type="button" aria-label={L(`Fewer ${label}`, `По-малко ${label}`)} onClick={() => onChange(Math.max(min, value - 1))}>
         −
       </button>
       <span aria-live="polite">{value}</span>
-      <button type="button" aria-label={`More ${label}`} onClick={() => onChange(Math.min(max, value + 1))}>
+      <button type="button" aria-label={L(`More ${label}`, `Повече ${label}`)} onClick={() => onChange(Math.min(max, value + 1))}>
         +
       </button>
     </div>

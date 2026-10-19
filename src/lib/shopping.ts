@@ -2,10 +2,13 @@ import type { Aisle, Household, Person } from './types'
 import { cooksInPlan, mealsAt, recipeOf } from './planner'
 import { diffDays, toDate } from './dates'
 import { formatQty, guessAisle } from './ingredients'
+import { L, ingredientName, recipeName, unitWord, word } from './i18n'
 
 export interface ListItem {
   key: string
   name: string
+  /** The name to show, in this phone's language. */
+  label: string
   qty: string
   aisle: Aisle
   soon: boolean
@@ -17,14 +20,31 @@ export interface ListItem {
 
 export const AISLE_ORDER: Aisle[] = ['veg', 'bakery', 'dry', 'meat', 'fridge', 'freezer', 'other']
 export const AISLE_NAMES: Record<Aisle, string> = {
-  veg: 'Veg & fruit, by the door',
-  bakery: 'Bread',
-  dry: 'Dry goods',
-  meat: 'Meat & fish',
-  fridge: 'Fridges',
-  freezer: 'Freezers',
-  other: 'Other',
+  get veg() {
+    return L('Veg & fruit, by the door', 'Плодове и зеленчуци, до входа')
+  },
+  get bakery() {
+    return L('Bread', 'Хляб')
+  },
+  get dry() {
+    return L('Dry goods', 'Сухи продукти')
+  },
+  get meat() {
+    return L('Meat & fish', 'Месо и риба')
+  },
+  get fridge() {
+    return L('Fridges', 'Хладилни витрини')
+  },
+  get freezer() {
+    return L('Freezers', 'Фризери')
+  },
+  get other() {
+    return L('Other', 'Други')
+  },
 }
+
+/** "500 g" → "500 г" on a Bulgarian phone. */
+const localQty = (q: string) => q.replace(/ (\S+)$/, (_, u: string) => ` ${unitWord(u)}`)
 
 const norm = (s: string) => s.toLowerCase().trim()
 
@@ -57,6 +77,7 @@ export function shoppingList(h: Household, now: Date): ListItem[] {
       if (isStaple(h, i.name)) continue
       const lactoseFree = i.lactose && eaters.has('S')
       const name = lactoseFree ? `${i.name}, lactose-free` : i.name
+      const label = lactoseFree ? `${ingredientName(i)}, ${L('lactose-free', 'без лактоза')}` : ingredientName(i)
       const covered = h.bought.some((b) => norm(b.name) === norm(name) && b.cookIds.includes(c.id))
       if (covered) continue
       // What's needed today and tomorrow is its own row, so a quick Lidl run buys only that.
@@ -67,22 +88,22 @@ export function shoppingList(h: Household, now: Date): ListItem[] {
       if (ex) {
         if (ex.unit === base.unit && base.qty != null) ex.q += base.qty * scale
         else ex.mixed = true
-        if (!ex.forRecipes.includes(r.name)) ex.forRecipes.push(r.name)
+        if (!ex.forRecipes.includes(recipeName(r))) ex.forRecipes.push(recipeName(r))
         ex.cookIds.push(c.id)
       } else {
-        map.set(key, { key, name, qty: '', aisle: i.aisle, soon, forRecipes: [r.name], cookIds: [c.id], kind: 'recipe', q: (base.qty ?? 0) * scale, unit: base.unit, mixed: base.qty == null })
+        map.set(key, { key, name, label, qty: '', aisle: i.aisle, soon, forRecipes: [recipeName(r)], cookIds: [c.id], kind: 'recipe', q: (base.qty ?? 0) * scale, unit: base.unit, mixed: base.qty == null })
       }
     }
   }
-  const items: ListItem[] = [...map.values()].map(({ q, unit, mixed, ...it }) => ({ ...it, qty: mixed || !q ? '' : formatQty({ qty: q, unit }) }))
+  const items: ListItem[] = [...map.values()].map(({ q, unit, mixed, ...it }) => ({ ...it, qty: mixed || !q ? '' : localQty(formatQty({ qty: q, unit })) }))
   for (const s of h.settings.runningOut) {
     if (map.has(norm(s)) || map.has(norm(s) + '|later')) continue
-    items.push({ key: 'staple:' + norm(s), name: s, qty: '', aisle: guessAisle(s), soon: true, forRecipes: [], cookIds: [], kind: 'staple' })
+    items.push({ key: 'staple:' + norm(s), name: s, label: word(s), qty: '', aisle: guessAisle(s), soon: true, forRecipes: [], cookIds: [], kind: 'staple' })
   }
   for (const e of h.extras) {
-    items.push({ key: 'extra:' + e.id, name: e.name, qty: '', aisle: guessAisle(e.name), soon: true, forRecipes: [], cookIds: [], kind: 'extra', extraId: e.id })
+    items.push({ key: 'extra:' + e.id, name: e.name, label: e.name, qty: '', aisle: guessAisle(e.name), soon: true, forRecipes: [], cookIds: [], kind: 'extra', extraId: e.id })
   }
-  return items.sort((a, b) => AISLE_ORDER.indexOf(a.aisle) - AISLE_ORDER.indexOf(b.aisle) || a.name.localeCompare(b.name))
+  return items.sort((a, b) => AISLE_ORDER.indexOf(a.aisle) - AISLE_ORDER.indexOf(b.aisle) || a.label.localeCompare(b.label))
 }
 
 /** Tick an item: it counts as bought for every planned meal that needs it right now. */

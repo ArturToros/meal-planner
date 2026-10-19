@@ -11,15 +11,20 @@ export interface Ingredient {
   unit?: string
   aisle: Aisle
   lactose?: boolean
+  /** Bulgarian name, when known. */
+  bg?: string
 }
 
 export interface Recipe {
   id: string
   name: string
+  /** Bulgarian name and steps, when known; the English ones stay the reference for planning. */
+  nameBg?: string
   minutes: number
   portions: number
   ingredients: Ingredient[]
   steps: string
+  stepsBg?: string
   eaters: Person[]
   boxable: boolean
   photo?: string

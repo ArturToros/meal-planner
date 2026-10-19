@@ -18,6 +18,7 @@ import {
   slotIsOffice,
   slotLabel,
   slotPhrase,
+  labelWord,
   type Choice,
   type Result,
 } from '../lib/planner'
@@ -25,19 +26,25 @@ import { diffDays } from '../lib/dates'
 import { isStaple } from '../lib/shopping'
 import { Back, Chevron, Sheet, Stepper, back, type AppCtx } from './common'
 import { resultToast } from './Plan'
+import { L, ingredientName, plural, recipeName, word } from '../lib/i18n'
 
 function toBuy(h: Household, r: Recipe, date: string): string[] {
   const recent = h.bought.filter((b) => diffDays(b.at.slice(0, 10), date) <= 3).map((b) => b.name.toLowerCase())
   return r.ingredients
     .filter((i) => !isStaple(h, i.name))
     .filter((i) => !recent.some((n) => n.includes(i.name.toLowerCase()) || i.name.toLowerCase().includes(n)))
-    .map((i) => i.name)
+    .map((i) => ingredientName({ name: word(i.name), bg: i.bg }))
 }
 
 function recipeMeta(h: Household, r: Recipe, date: string): string {
   const need = toBuy(h, r, date)
-  const buy = need.length === 0 ? 'nothing to buy' : need.length <= 2 ? `buy ${need.join(', ')}` : `buy ${need.length} things`
-  return `${r.minutes} min · ${buy}${r.isIdea ? ' · new idea' : ''}`
+  const buy =
+    need.length === 0
+      ? L('nothing to buy', 'нищо за купуване')
+      : need.length <= 2
+        ? L(`buy ${need.join(', ')}`, `купи ${need.join(', ')}`)
+        : L(`buy ${need.length} things`, `купи ${plural(need.length, 'thing', 'things', 'нещо', 'неща')}`)
+  return `${r.minutes} ${L('min', 'мин')} · ${buy}${r.isIdea ? L(' · new idea', ' · нова идея') : ''}`
 }
 
 export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: Slot }) {
@@ -53,7 +60,7 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
   const label = slotLabel({ date, slot }, now)
   const currentRecipe = meal?.kind === 'cook' ? cookOf(h, meal.cookId)?.recipeId : undefined
 
-  const run = (fn: (x: Household) => Result, done = 'Done.', leave = true) => {
+  const run = (fn: (x: Household) => Result, done = L('Done.', 'Готово.'), leave = true) => {
     const before = h
     let res: Result | undefined
     dispatch((x) => {
@@ -84,7 +91,7 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
 
   const togglePerson = (p: Person) => {
     const next = expected.includes(p) ? expected.filter((x) => x !== p) : [...expected, p]
-    run((x) => setEaters(x, date, slot, next, { now, by: me }), 'Updated.', false)
+    run((x) => setEaters(x, date, slot, next, { now, by: me }), L('Updated.', 'Обновено.'), false)
   }
 
   return (
@@ -93,24 +100,24 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
       <div className="pad rule" style={{ paddingBottom: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <h1 className="h1">{label}</h1>
         <div className="field">
-          <span>Who's eating</span>
+          <span>{L("Who's eating", 'Кой яде')}</span>
           <div className="row-flex" style={{ flexWrap: 'wrap' }}>
             {PEOPLE.map((p) => (
               <button key={p} className={'chip' + (expected.includes(p) ? ' on' : '')} aria-pressed={expected.includes(p)} onClick={() => togglePerson(p)}>
-                {h.settings.names[p]}
+                {word(h.settings.names[p])}
               </button>
             ))}
           </div>
         </div>
         {meal && (meal.kind === 'cook' || meal.kind === 'simple' || meal.kind === 'order') && (
           <div className="field" style={{ maxWidth: 200 }}>
-            <span>Guests</span>
-            <Stepper label="guests" value={meal.guests ?? 0} max={10} onChange={(n) => run((x) => setGuests(x, meal.id, n, { now, by: me }), 'Updated.', false)} />
+            <span>{L('Guests', 'Гости')}</span>
+            <Stepper label={L('guests', 'гости')} value={meal.guests ?? 0} max={10} onChange={(n) => run((x) => setGuests(x, meal.id, n, { now, by: me }), L('Updated.', 'Обновено.'), false)} />
           </div>
         )}
         {meals.length > 1 && (
           <div className="field">
-            <span>Which one to change</span>
+            <span>{L('Which one to change', 'Кое да сменим')}</span>
             <div className="row-flex" style={{ flexWrap: 'wrap' }}>
               {meals.map((m, i) => (
                 <button key={m.id} className={'chip' + (i === pick ? ' on' : '')} aria-pressed={i === pick} onClick={() => setPick(i)}>
@@ -122,21 +129,22 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
         )}
         {meal && (
           <p className="mono muted" style={{ margin: 0 }}>
-            Now: {mealName(h, meal)}
-            {meal.kind === 'leftover' ? ' (leftover)' : ''}
-            {office ? ' · office box' : ''}
+            {L('Now: ', 'Сега: ')}
+            {mealName(h, meal)}
+            {meal.kind === 'leftover' ? L(' (leftover)', ' (остатък)') : ''}
+            {office ? L(' · office box', ' · кутия за офиса') : ''}
           </p>
         )}
       </div>
 
-      {!meal && <p className="pad muted">Nobody is eating at home. Tap a name above if that changes.</p>}
+      {!meal && <p className="pad muted">{L('Nobody is eating at home. Tap a name above if that changes.', 'Никой не яде вкъщи. Докосни име горе, ако това се промени.')}</p>}
 
       {meal && (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {ranked.slice(0, 3).map(({ recipe }) => (
             <button key={recipe.id} className="option" onClick={() => choose({ type: 'recipe', recipeId: recipe.id })}>
               <span style={{ flex: 1 }}>
-                <span className="t">{recipe.name}</span>
+                <span className="t">{recipeName(recipe)}</span>
                 <span className="m">{recipeMeta(h, recipe, date)}</span>
               </span>
               <Chevron />
@@ -145,9 +153,15 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
           {leftovers.map((c) => (
             <button key={c.id} className="option" onClick={() => choose({ type: 'leftover', cookId: c.id })}>
               <span style={{ flex: 1 }}>
-                <span className="t">Leftover {recipeOf(h, c.recipeId)?.name}</span>
+                <span className="t">
+                  {L('Leftover ', 'Остатък ')}
+                  {(() => {
+                    const lr = recipeOf(h, c.recipeId)
+                    return lr ? recipeName(lr) : ''
+                  })()}
+                </span>
                 <span className="m">
-                  {available(h, c.id)} boxes · from {slotPhrase(c, now)}
+                  {plural(available(h, c.id), 'box', 'boxes', 'кутия', 'кутии')} · {L('from', 'от')} {slotPhrase(c, now)}
                 </span>
               </span>
               <Chevron />
@@ -156,23 +170,33 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
           {freezer.map((f) => (
             <button key={f.id} className="option" onClick={() => choose({ type: 'freezer', freezerId: f.id })}>
               <span style={{ flex: 1 }}>
-                <span className="t">{recipeOf(h, f.recipeId)?.name} from the freezer</span>
-                <span className="m">{freezerAvailable(h, f.id)} portions frozen</span>
+                <span className="t">
+                  {(() => {
+                    const fr = recipeOf(h, f.recipeId)
+                    return fr ? recipeName(fr) : ''
+                  })()}
+                  {L(' from the freezer', ' от фризера')}
+                </span>
+                <span className="m">{L(`${freezerAvailable(h, f.id)} portions frozen`, `${freezerAvailable(h, f.id)} замразени порции`)}</span>
               </span>
               <Chevron />
             </button>
           ))}
           <button className="option" onClick={() => choose({ type: 'simple', label: h.settings.quickMeals[0] ?? 'Sandwiches' })}>
             <span style={{ flex: 1 }}>
-              <span className="t">{h.settings.quickMeals[0] ?? 'Sandwiches'}</span>
-              <span className="m">10 min · lazy night</span>
+              <span className="t">{labelWord(h.settings.quickMeals[0] ?? 'Sandwiches')}</span>
+              <span className="m">{L('10 min · lazy night', '10 мин · мързелива вечер')}</span>
             </span>
             <Chevron />
           </button>
           <button className="option yellow" onClick={() => setOrdering('')}>
             <span style={{ flex: 1 }}>
-              <span className="t">Order in</span>
-              <span className="m">{meal.kind === 'cook' ? 'fine sometimes · the dish moves to another day' : 'fine sometimes · goes into money'}</span>
+              <span className="t">{L('Order in', 'Поръчваме')}</span>
+              <span className="m">
+                {meal.kind === 'cook'
+                  ? L('fine sometimes · the dish moves to another day', 'понякога е ок · ястието се мести за друг ден')
+                  : L('fine sometimes · goes into money', 'понякога е ок · отива в разходите')}
+              </span>
             </span>
             <Chevron />
           </button>
@@ -180,32 +204,34 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
             {!more ? (
               <div className="grid2">
                 <button className="btn ghost" onClick={() => setMore(true)}>
-                  Other ideas
+                  {L('Other ideas', 'Други идеи')}
                 </button>
                 <button className="btn ghost" onClick={() => choose({ type: 'out' })}>
-                  Eating out
+                  {L('Eating out', 'Навън')}
                 </button>
               </div>
             ) : (
               <>
                 <label className="field">
-                  <span>All recipes</span>
-                  <input className="input" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
+                  <span>{L('All recipes', 'Всички рецепти')}</span>
+                  <input className="input" placeholder={L('Search', 'Търси')} value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
                 </label>
                 <div>
                   {h.settings.quickMeals.slice(1).map((q) => (
                     <button key={q} className="row-btn" onClick={() => choose({ type: 'simple', label: q })}>
-                      <span className="what">{q}</span>
-                      <span className="who">QUICK</span>
+                      <span className="what">{labelWord(q)}</span>
+                      <span className="who">{L('QUICK', 'БЪРЗО')}</span>
                     </button>
                   ))}
                   {all.map(({ recipe }) => (
                     <button key={recipe.id} className="row-btn" onClick={() => choose({ type: 'recipe', recipeId: recipe.id })}>
-                      <span className="what">{recipe.name}</span>
-                      <span className="who">{recipe.minutes} MIN</span>
+                      <span className="what">{recipeName(recipe)}</span>
+                      <span className="who">
+                        {recipe.minutes} {L('MIN', 'МИН')}
+                      </span>
                     </button>
                   ))}
-                  {!all.length && <p className="muted">No recipe fits everyone here. Change who's eating, or add a recipe.</p>}
+                  {!all.length && <p className="muted">{L("No recipe fits everyone here. Change who's eating, or add a recipe.", 'Няма рецепта за всички тук. Смени кой яде или добави рецепта.')}</p>}
                 </div>
               </>
             )}
@@ -214,8 +240,8 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
       )}
 
       {ordering !== null && meal && (
-        <Sheet label="Order in" onClose={() => setOrdering(null)}>
-          <h2 className="h2">Order in</h2>
+        <Sheet label={L('Order in', 'Поръчваме')} onClose={() => setOrdering(null)}>
+          <h2 className="h2">{L('Order in', 'Поръчваме')}</h2>
           <form
             className="stack"
             onSubmit={(e) => {
@@ -227,10 +253,10 @@ export function Change({ ctx, date, slot }: { ctx: AppCtx; date: string; slot: S
             }}
           >
             <label className="field">
-              <span>How much, in euros? You can add it later.</span>
-              <input className="input" inputMode="decimal" placeholder="e.g. 24.50" value={ordering} onChange={(e) => setOrdering(e.target.value)} autoFocus />
+              <span>{L('How much, in euros? You can add it later.', 'Колко, в евро? Може да го добавиш и по-късно.')}</span>
+              <input className="input" inputMode="decimal" placeholder={L('e.g. 24.50', 'напр. 24.50')} value={ordering} onChange={(e) => setOrdering(e.target.value)} autoFocus />
             </label>
-            <button className="btn wide">Order in</button>
+            <button className="btn wide">{L('Order in', 'Поръчваме')}</button>
           </form>
         </Sheet>
       )}

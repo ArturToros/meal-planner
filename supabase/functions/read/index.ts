@@ -15,24 +15,27 @@ const ingredient = {
   type: 'object',
   properties: {
     name: { type: 'string', description: 'Ingredient name in English, lowercase, without the amount, e.g. "chicken breast"' },
+    bg: { type: 'string', description: 'The same ingredient in Bulgarian, lowercase, e.g. "пилешко филе"' },
     qty: { type: ['number', 'null'], description: 'Amount as a number, or null when the recipe gives none (salt, pepper, oil)' },
     unit: { type: 'string', enum: ['', 'g', 'kg', 'ml', 'l', 'tbsp', 'tsp', 'cup', 'pcs', 'pack', 'can', 'clove', 'bunch', 'slice'] },
   },
-  required: ['name', 'qty', 'unit'],
+  required: ['name', 'bg', 'qty', 'unit'],
   additionalProperties: false,
 }
 
 const recipe = {
   type: 'object',
   properties: {
-    name: { type: 'string' },
+    name: { type: 'string', description: 'Dish name in English' },
+    nameBg: { type: 'string', description: 'Dish name in Bulgarian' },
     minutes: { type: 'integer', description: 'Total time from start to eating' },
     portions: { type: 'integer' },
     ingredients: { type: 'array', items: ingredient },
-    steps: { type: 'string', description: 'Short numbered steps, one per line' },
+    steps: { type: 'string', description: 'Short numbered steps in English, one per line' },
+    stepsBg: { type: 'string', description: 'The same steps in Bulgarian, one per line' },
     boxable: { type: 'boolean', description: 'True if it reheats well in a lunch box in an office microwave (not soups, not salads that wilt, not fried crispy food)' },
   },
-  required: ['name', 'minutes', 'portions', 'ingredients', 'steps', 'boxable'],
+  required: ['name', 'nameBg', 'minutes', 'portions', 'ingredients', 'steps', 'stepsBg', 'boxable'],
   additionalProperties: false,
 }
 
@@ -62,6 +65,18 @@ const SCHEMAS: Record<string, Record<string, unknown>> = {
     additionalProperties: false,
   },
   recipe: { ...recipe, properties: { ...recipe.properties, readable: { type: 'boolean', description: 'False if there is no recipe in what you were given' } }, required: [...recipe.required, 'readable'] },
+  translate: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      nameBg: { type: 'string' },
+      steps: { type: 'string' },
+      stepsBg: { type: 'string' },
+      ingredients: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, bg: { type: 'string' } }, required: ['name', 'bg'], additionalProperties: false } },
+    },
+    required: ['name', 'nameBg', 'steps', 'stepsBg', 'ingredients'],
+    additionalProperties: false,
+  },
   ideas: { type: 'object', properties: { ideas: { type: 'array', items: recipe } }, required: ['ideas'], additionalProperties: false },
 }
 
@@ -77,13 +92,17 @@ Include every purchased line; skip deposit returns, subtotals and payment lines.
 ${context ? `Names on their shopping list, use these exact words for "english" when an item matches one: ${JSON.stringify((context as { listNames?: string[] }).listNames ?? [])}` : ''}`
   }
   if (kind === 'recipe') {
-    return `Turn this into a recipe for a home cook app. Write everything in English (translate from Bulgarian or any other language).
+    return `Turn this into a recipe for a home cook app used in both English and Bulgarian. Fill the English fields in English and the Bg fields in Bulgarian. When the source is in Bulgarian, keep its own wording for the Bulgarian fields and translate it for the English ones.
 Keep the original recipe; do not adapt it. Use metric amounts. Keep steps short. If no portions are given, estimate them. If there is no recipe here, set readable to false.`
+  }
+  if (kind === 'translate') {
+    return `This recipe is used in an app in both English and Bulgarian. Return it in both languages: keep whichever side is already written (it may have been typed in Bulgarian into the English fields) and translate the other. Give the ingredients in the same order, names only, lowercase, without amounts.
+Recipe: ${JSON.stringify(context)}`
   }
   const c = (context ?? {}) as { have?: string[]; recent?: string[] }
   return `${HOUSEHOLD}
 
-Suggest exactly 2 new dinner recipes for this week that they do not already have. Each should cook in under 45 minutes from ingredients easy to find at Lidl in Bulgaria, make 4 to 6 portions so it can feed tomorrow's lunch too, and be good reheated in a lunch box.
+Suggest exactly 2 new dinner recipes, with names, ingredients and steps in both English and Bulgarian, for this week that they do not already have. Each should cook in under 45 minutes from ingredients easy to find at Lidl in Bulgaria, make 4 to 6 portions so it can feed tomorrow's lunch too, and be good reheated in a lunch box.
 Make the two different from each other (for example one chicken or fish, one beef, pork or vegetarian). Familiar, not fancy.
 Recipes they already have: ${JSON.stringify(c.have ?? [])}
 Cooked recently: ${JSON.stringify(c.recent ?? [])}`
@@ -138,7 +157,7 @@ Deno.serve(async (req) => {
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      output_config: { effort: kind === 'ideas' ? 'low' : 'medium', format: { type: 'json_schema', schema: SCHEMAS[kind] } },
+      output_config: { effort: kind === 'ideas' || kind === 'translate' ? 'low' : 'medium', format: { type: 'json_schema', schema: SCHEMAS[kind] } },
       messages: [{ role: 'user', content }],
     })
 

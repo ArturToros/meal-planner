@@ -1,10 +1,20 @@
 import { useState } from 'react'
 import type { Household } from '../lib/types'
 import { cookOf, markCooked, recipeOf, slotLabel, type Result } from '../lib/planner'
-import { formatIngredient } from '../lib/ingredients'
+import { formatQty } from '../lib/ingredients'
 import { backend, compressImage } from '../lib/backend'
 import { Back, Icon, PhotoInput, Sheet, Stepper, go, type AppCtx } from './common'
 import { resultToast } from './Plan'
+import { L, ingredientName, plural, recipeName, recipeSteps, unitWord, word } from '../lib/i18n'
+import type { Ingredient } from '../lib/types'
+
+/** "1.5 kg chicken breast" in the phone's language. */
+function ingredientLine(i: Ingredient, scale: number): string {
+  const q = formatQty(i, scale)
+  const [n, u] = q.split(' ')
+  const qty = u ? `${n} ${unitWord(u)}` : q
+  return [qty, ingredientName({ name: word(i.name), bg: i.bg })].filter(Boolean).join(' ')
+}
 
 export function Cook({ ctx, cookId }: { ctx: AppCtx; cookId: string }) {
   const { h, now, me, dispatch } = ctx
@@ -17,7 +27,7 @@ export function Cook({ ctx, cookId }: { ctx: AppCtx; cookId: string }) {
   const [boxes, setBoxes] = useState(c ? Math.max(0, c.portions - eatNow) : 0)
   const [photo, setPhoto] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  if (!c || !r) return <div className="screen no-nav"><Back /><p className="pad">This meal is no longer in the plan.</p></div>
+  if (!c || !r) return <div className="screen no-nav"><Back /><p className="pad">{L('This meal is no longer in the plan.', 'Това ястие вече не е в плана.')}</p></div>
   const scale = c.portions / r.portions
 
   const finish = () => {
@@ -31,7 +41,7 @@ export function Cook({ ctx, cookId }: { ctx: AppCtx; cookId: string }) {
       }
       return res.h
     })
-    if (res) resultToast(ctx, before, res, `Enjoy. ${boxes} box${boxes === 1 ? '' : 'es'} saved.`)
+    if (res) resultToast(ctx, before, res, L(`Enjoy. ${boxes} box${boxes === 1 ? '' : 'es'} saved.`, `Добър апетит. Записани: ${plural(boxes, 'box', 'boxes', 'кутия', 'кутии')}.`))
     go('plan')
   }
 
@@ -41,13 +51,16 @@ export function Cook({ ctx, cookId }: { ctx: AppCtx; cookId: string }) {
       {r.photo && <img src={r.photo} alt="" className="photo" />}
       <div className="pad rule" style={{ paddingTop: 12, paddingBottom: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div className="mono">{slotLabel(c, now)}</div>
-        <h1 className="h1">{r.name}</h1>
+        <h1 className="h1">{recipeName(r)}</h1>
         <p style={{ margin: 0, fontSize: 17 }}>
-          {c.portions} portions · about {r.minutes} min{scale !== 1 ? ` · amounts scaled from ${r.portions} portions` : ''}
+          {L(
+            `${c.portions} portions · about ${r.minutes} min${scale !== 1 ? ` · amounts scaled from ${r.portions} portions` : ''}`,
+            `${c.portions} порции · около ${r.minutes} мин${scale !== 1 ? ` · количествата са преизчислени от ${r.portions} порции` : ''}`,
+          )}
         </p>
       </div>
       <div className="pad">
-        <div className="section-label">Ingredients</div>
+        <div className="section-label">{L('Ingredients', 'Продукти')}</div>
         {r.ingredients.map((i, n) => (
           <label key={n} className={'check' + (ticked.has(n) ? ' done' : '')}>
             <input
@@ -60,35 +73,38 @@ export function Cook({ ctx, cookId }: { ctx: AppCtx; cookId: string }) {
                 setTicked(next)
               }}
             />
-            <span className="n">{formatIngredient(i, scale)}</span>
+            <span className="n">{ingredientLine(i, scale)}</span>
           </label>
         ))}
-        {r.steps && (
+        {recipeSteps(r) && (
           <>
-            <div className="section-label">How</div>
-            <p style={{ whiteSpace: 'pre-line', fontSize: 17, lineHeight: 1.5, margin: '4px 0 0' }}>{r.steps}</p>
+            <div className="section-label">{L('How', 'Приготвяне')}</div>
+            <p style={{ whiteSpace: 'pre-line', fontSize: 17, lineHeight: 1.5, margin: '4px 0 0' }}>{recipeSteps(r)}</p>
           </>
         )}
         {r.sourceUrl && (
           <p>
             <a href={r.sourceUrl} target="_blank" rel="noreferrer">
-              Original recipe
+              {L('Original recipe', 'Оригинална рецепта')}
             </a>
           </p>
         )}
         <div style={{ paddingTop: 20 }}>
           <button className="btn wide" onClick={() => setDone(true)}>
-            Done cooking
+            {L('Done cooking', 'Сготвено')}
           </button>
         </div>
       </div>
       {done && (
-        <Sheet label="Done cooking" onClose={() => setDone(false)}>
-          <h2 className="h2">How many boxes are left?</h2>
+        <Sheet label={L('Done cooking', 'Сготвено')} onClose={() => setDone(false)}>
+          <h2 className="h2">{L('How many boxes are left?', 'Колко кутии останаха?')}</h2>
           <p className="muted" style={{ margin: 0 }}>
-            After {eatNow} portion{eatNow === 1 ? '' : 's'} for now. The plan uses exactly this many later.
+            {L(
+              `After ${eatNow} portion${eatNow === 1 ? '' : 's'} for now. The plan uses exactly this many later.`,
+              `След ${plural(eatNow, 'portion', 'portions', 'порция', 'порции')} за сега. Планът ще използва точно толкова по-късно.`,
+            )}
           </p>
-          <Stepper label="boxes" value={boxes} onChange={setBoxes} max={20} />
+          <Stepper label={L('boxes', 'кутии')} value={boxes} onChange={setBoxes} max={20} />
           <PhotoInput
             camera
             className="photo-btn"
@@ -97,21 +113,21 @@ export function Cook({ ctx, cookId }: { ctx: AppCtx; cookId: string }) {
               try {
                 setPhoto(await backend.uploadPhoto(await compressImage(f)))
               } catch (e) {
-                ctx.toast({ text: `Photo not saved: ${(e as Error).message}` })
+                ctx.toast({ text: L(`Photo not saved: ${(e as Error).message}`, `Снимката не е запазена: ${(e as Error).message}`) })
               } finally {
                 setUploading(false)
               }
             }}
           >
-            {photo ? <img src={photo} alt="Your photo of the dish" className="thumb" /> : uploading ? <span className="spinner" /> : <Icon name="camera" />}
+            {photo ? <img src={photo} alt={L('Your photo of the dish', 'Твоята снимка на ястието')} className="thumb" /> : uploading ? <span className="spinner" /> : <Icon name="camera" />}
             <span>
-              {photo ? 'Photo added' : 'Add a photo?'}
+              {photo ? L('Photo added', 'Снимката е добавена') : L('Add a photo?', 'Да добавим снимка?')}
               <br />
-              <small>Shows on the plan next time</small>
+              <small>{L('Shows on the plan next time', 'Ще се вижда в плана следващия път')}</small>
             </span>
           </PhotoInput>
           <button className="btn wide" onClick={finish} disabled={uploading}>
-            Save
+            {L('Save', 'Запази')}
           </button>
         </Sheet>
       )}
